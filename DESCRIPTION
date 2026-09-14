@@ -13,6 +13,7 @@ Imports:
     Rcpp (>= 1.0.8),
     checkmate
 Suggests:
+    covr,
     testthat (>= 3.0.0)
 Description: Analytic one, two and three compartment linear pharmacokinetic
     solutions with their parameter gradients from 'stan' automatic

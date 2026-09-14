@@ -3,6 +3,21 @@
 
 # rxode2lincmt
 
+<!-- badges: start -->
+
+[![R-CMD-check](https://github.com/nlmixr2/rxode2lincmt/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/nlmixr2/rxode2lincmt/actions/workflows/R-CMD-check.yaml)
+[![Codecov test
+coverage](https://codecov.io/gh/nlmixr2/rxode2lincmt/graph/badge.svg)](https://app.codecov.io/gh/nlmixr2/rxode2lincmt)
+[![CRAN
+version](http://www.r-pkg.org/badges/version/rxode2lincmt)](https://cran.r-project.org/package=rxode2lincmt)
+[![CRAN total
+downloads](https://cranlogs.r-pkg.org/badges/grand-total/rxode2lincmt)](https://cran.r-project.org/package=rxode2lincmt)
+[![CRAN total
+downloads](https://cranlogs.r-pkg.org/badges/rxode2lincmt)](https://cran.r-project.org/package=rxode2lincmt)
+[![CodeFactor](https://www.codefactor.io/repository/github/nlmixr2/rxode2lincmt/badge)](https://www.codefactor.io/repository/github/nlmixr2/rxode2lincmt)
+![r-universe](https://nlmixr2.r-universe.dev/badges/rxode2lincmt)
+<!-- badges: end -->
+
 `rxode2lincmt` provides the analytic one, two and three compartment
 linear pharmacokinetic solutions and their parameter gradients that
 [rxode2](https://nlmixr2.github.io/rxode2/)'s `linCmt()` uses. The
