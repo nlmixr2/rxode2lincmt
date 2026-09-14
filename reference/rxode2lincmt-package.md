@@ -24,6 +24,8 @@ different.
 
 Useful links:
 
+- <https://nlmixr2.github.io/rxode2lincmt/>
+
 - <https://github.com/nlmixr2/rxode2lincmt/>
 
 - Report bugs at <https://github.com/nlmixr2/rxode2lincmt/issues/>
@@ -37,3 +39,7 @@ Authors:
 
 - Matthew L. Fidler <matthew.fidler@gmail.com>
   ([ORCID](https://orcid.org/0000-0001-8538-6691))
+
+Other contributors:
+
+- Richard Upton \[contributor\]
