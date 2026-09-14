@@ -518,7 +518,7 @@ static int linCmtDeltaMemoForce = -1;
 //' @return the previous setting, invisibly usable to restore it
 //' @keywords internal
 //' @export
-//[[Rcpp::export]]
+// [[Rcpp::export(.linCmtDeltaMemo)]]
 int linCmtDeltaMemo(int on = -1) {
   int prev = linCmtDeltaMemoForce;
   linCmtDeltaMemoForce = on;
@@ -546,7 +546,7 @@ int linCmtDeltaMemo(int on = -1) {
 //'   matrix; RX_LINCMT_PHI=2)
 //' @keywords internal
 //' @export
-//[[Rcpp::export]]
+// [[Rcpp::export(.linCmtSeqStats)]]
 IntegerVector linCmtSeqStats(bool reset = false) {
   IntegerVector r = IntegerVector::create(_["windows"] = linCmtWinN,
                                           _["seqTailRows"] = linCmtSeqTailN,
@@ -1653,6 +1653,45 @@ static inline bool linCmtModelDoubleJac(stan::math::linCmtStan &lc, int sensType
   }
 }
 
+//' Advance a linear compartment model by one step
+//'
+//' Advances the amounts of a one, two or three compartment linear model by
+//' `dt` and returns the central concentration, optionally with its
+//' derivatives.  This is the per-row kernel behind rxode2's `linCmt()`.
+//'
+//' @param dt time step
+//' @param p1,v1,p2,p3,p4,p5 parameters in the `trans` parameterization (see
+//'   [linCmtMicros()])
+//' @param ka absorption rate constant (used when `oral0` is 1)
+//' @param alastNV amounts at the start of the step (depot first when
+//'   `oral0` is 1, then central and peripherals); with `deriv = TRUE`
+//'   followed by their parameter sensitivities
+//' @param rateNV zero-order rates into each compartment, in the same order
+//' @param ncmt number of compartments, 1 to 3
+//' @param oral0 1 when the model has a depot compartment, otherwise 0
+//' @param trans parameterization number
+//' @param deriv logical; also return the derivatives
+//' @param type 0 for a regular step; 1 and 2 steady-state infusion, 3
+//'   steady-state bolus
+//' @param tau steady-state dosing interval
+//' @param tinf steady-state infusion duration
+//' @param amt steady-state bolus amount
+//' @param bolusCmt steady-state bolus compartment
+//' @param ndiff differentiation bit mask as used by rxode2 (`ka` 1, `p1` 2,
+//'   `v1` 4, `p2` 8, `p3` 16, `p4` 32, `p5` 64)
+//' @param sensType derivative method: 3 or 30 forward-mode automatic
+//'   differentiation, 32 all directions in one forward-mode pass, 31
+//'   reverse mode, 100 automatic choice, 1 and 2 forward and central
+//'   differences with the kernel's own step, 10 and 20 forward and central
+//'   differences with step `sensH`
+//' @param sensH finite-difference step for `sensType` 10 and 20
+//' @return list with `val` (central concentration) and `Alast` (carried
+//'   state after the step); with `deriv = TRUE` also `J` (Jacobian of the
+//'   amounts) and `Jg` (gradient of `val`)
+//' @export
+//' @examples
+//' linCmtModelDouble(1, 2, 20, 0, 0, 0, 0, 0, 100, 0, 1L, 0L, 1L, FALSE,
+//'                   0L, 0, 0, 0, 0L, 0L)
 // [[Rcpp::export]]
 RObject linCmtModelDouble(double dt,
                           double p1, double v1, double p2,
@@ -1766,7 +1805,7 @@ static uint64_t linCmtCarryAdvFastN = 0;
 //' @return the previous state, invisibly
 //' @keywords internal
 //' @export
-// [[Rcpp::export]]
+// [[Rcpp::export(.linCmtCarrySetFast)]]
 LogicalVector linCmtCarrySetFast(bool enable) {
   bool prev = linCmtCarryFastEnabled != 0;
   linCmtCarryFastEnabled = enable ? 1 : 0;
@@ -1780,7 +1819,7 @@ LogicalVector linCmtCarrySetFast(bool enable) {
 //' @return integer, the magnitude of the most negative carry sentinel
 //' @keywords internal
 //' @export
-// [[Rcpp::export]]
+// [[Rcpp::export(.linCmtCarrySentinelMax)]]
 IntegerVector linCmtCarrySentinelMax() {
   return IntegerVector::create(8L);
 }
@@ -1792,7 +1831,7 @@ IntegerVector linCmtCarrySentinelMax() {
 //'   advFast (subset that took the constant-theta skip)
 //' @keywords internal
 //' @export
-// [[Rcpp::export]]
+// [[Rcpp::export(.linCmtCarryFastStats)]]
 NumericVector linCmtCarryFastStats(bool reset = false) {
   NumericVector out = NumericVector::create(
     _["advCalls"] = (double)linCmtCarryAdvCallsN,
@@ -1826,14 +1865,18 @@ NumericVector linCmtCarryFastStats(bool reset = false) {
 // p2 argument slot of linCmtB (per that sentinel's contract), so addVal[i]
 // is passed THERE and theta(i,2) is ignored for those rows (no theta is
 // read by -7 anyway).
-// [[Rcpp::export]]
+//' Internal test/benchmark hook
+//'
+//' @noRd
+//' @export
+// [[Rcpp::export(.linCmtCarryLiveTest)]]
 NumericVector linCmtCarryLiveTest(int id, NumericVector t, NumericVector tPrior,
                                    NumericMatrix theta,
                                    int ncmt, int oral0, int trans,
                                    IntegerVector which1, IntegerVector which2,
                                    Nullable<NumericVector> addVal = R_NilValue) {
   rx_solve *rx = getRxSolve_();
-  rx_solving_options_ind *ind = &(RXS(rx, subjects)[id]);
+  rx_solving_options_ind *ind = RX_IND(rx, id);
   int n = t.size();
   if (theta.nrow() != n || theta.ncol() != 7) {
     Rcpp::stop("theta must be length(t) x 7 (p1, v1, p2, p3, p4, p5, ka)");
@@ -1889,7 +1932,11 @@ static int linCmtBThreadSeen[RX_LINCMTB_THREAD_SEEN];
 #define RX_LINCMTB_SENS_SEEN 128
 static int linCmtBSensSeen[RX_LINCMTB_SENS_SEEN];
 
-//[[Rcpp::export]]
+//' Internal test/benchmark hook
+//'
+//' @noRd
+//' @export
+// [[Rcpp::export(.linCmtBSensTypesSeen)]]
 IntegerVector linCmtBSensTypesSeen(bool reset) {
   std::vector<int> v;
   for (int i = 0; i < RX_LINCMTB_SENS_SEEN; i++) {
@@ -1899,7 +1946,11 @@ IntegerVector linCmtBSensTypesSeen(bool reset) {
   return wrap(v);
 }
 
-//[[Rcpp::export]]
+//' Internal test/benchmark hook
+//'
+//' @noRd
+//' @export
+// [[Rcpp::export(.linCmtBThreadsSeen)]]
 int linCmtBThreadsSeen(bool reset) {
   int n = 0;
   for (int i = 0; i < RX_LINCMTB_THREAD_SEEN; i++) {
@@ -1977,7 +2028,7 @@ extern "C" double linCmtA(rx_solve *rx, int id,
 #define lc    lca.lc
 #define theta lca.theta
 #define yp    lca.yp
-  rx_solving_options_ind *ind = &(RXS(rx, subjects)[id]);
+  rx_solving_options_ind *ind = RX_IND(rx, id);
   rx_solving_options *op = RXS(rx, op);
   // get the linear solved system object.
   // rx_get_thread() honors the cross-DLL thread-id override (see rxData.cpp /
@@ -3029,7 +3080,7 @@ extern "C" double linCmtB(rx_solve *rx, int id,
 #pragma omp atomic write
     linCmtBThreadSeen[_tid] = 1;
   }
-  rx_solving_options_ind *ind = &(RXS(rx, subjects)[id]);
+  rx_solving_options_ind *ind = RX_IND(rx, id);
   // The individual's own carried state: window + value memo.  Because it
   // belongs to the individual, none of the keys below need the subject id
   // any more -- this block IS the subject.
