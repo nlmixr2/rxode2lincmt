@@ -6,7 +6,7 @@ SH=@SH@
 CXX_STD = CXX17
 ################################################################################
 ## Package library flags.
-PKG_LIBS    = $(SHLIB_OPENMP_CXXFLAGS) @SL@
+PKG_LIBS    = $(SHLIB_OPENMP_CXXFLAGS)
 
 # Same optimization and Stan/Eigen defines as rxode2 had, so the moved
 # kernels produce bitwise identical results.

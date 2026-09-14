@@ -45,6 +45,10 @@ The numerical results are unchanged: a 195-case comparison of the split
 'nlmixr2est' (a reverse dependency of 'rxode2', not rebuilt) gives identical
 estimates.
 
+'rxode2lincmt' uses the 'StanHeaders' and 'RcppParallel' headers only
+(LinkingTo).  It neither links nor loads the TBB library, whose bundled copy
+in 'RcppParallel' is what the gcc-UBSAN check reports for 'rxode2' 5.1.7.
+
 The closed-form solutions follow the idea of the 'wnl' package by Kyun-Seop
 Bae; the implementation here is different.
 

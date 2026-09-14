@@ -119,18 +119,20 @@ restart R or run `rxode2:::.linkAll()` interactively (never in code).
 The kernels must give bitwise identical results to rxode2 5.1.7.  That
 depends on keeping the same compile flags: the `@O2@` compiler probe in
 `inst/tools/workaround.R` (`-O3 -fno-math-errno -mtune=native` for gcc/clang),
-`-DSTAN_THREADS` (from StanHeaders), `-DEIGEN_DONT_PARALLELIZE` and
+`-DSTAN_THREADS`, `-DEIGEN_DONT_PARALLELIZE` and
 `-DBOOST_DISABLE_ASSERTS`.  Changing any of them is a numeric change.
 
 ### Stan / TBB build
 
-`inst/tools/workaround.R` writes `src/Makevars(.win)`: StanHeaders and
-RcppParallel compile and link flags, the Windows RcppParallel 6.0.0-6.1.1
-no-TBB stripping (which drops `-DSTAN_THREADS` and pre-defines the
-`init_chainablestack.hpp` guard via `src/lcStanCompat.h`, with
-`linCmt.cpp` creating the main-thread AD tape under
-`RXODE2_NO_STAN_TBB_OBSERVER`).  `importFrom(RcppParallel, RcppParallelLibs)`
-loads libtbb before this DLL.
+`inst/tools/workaround.R` writes `src/Makevars(.win)` with header-only Stan
+flags (`-DSTAN_THREADS`, the RcppParallel TBB and StanHeaders include
+directories) built with `system.file()`.  Nothing links or loads TBB:
+`src/lcStanCompat.h` pre-defines the `init_chainablestack.hpp` guard so stan's
+TBB `ad_tape_observer` never compiles; `linCmt.cpp` creates the loading
+thread's AD tape (`RXODE2_NO_STAN_TBB_OBSERVER`) and `linCmtRevTapeInit()`
+every other thread's.  Loading TBB is what CRAN's gcc-UBSAN check reports, so
+never import 'RcppParallel', call `StanHeaders:::CxxFlags()`/`LdFlags()` (they
+load it) or add `-ltbb`; `tests/testthat/test-no-tbb.R` guards this.
 
 ## R Code Style
 
