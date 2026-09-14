@@ -5,6 +5,8 @@
 - **Matthew L. Fidler**. Author, maintainer.
   [](https://orcid.org/0000-0001-8538-6691)
 
+- **Richard Upton**. Contributor.
+
 ## Citation
 
 Source:
