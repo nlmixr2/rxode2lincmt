@@ -26,4 +26,6 @@ test_that("before registration every offset is unset and no host function is bou
   expect_true(all(.info$offsets == -1L))
   expect_named(.info$fns, c("getTime", "rxThreadSlot", "getRxSolve"))
   expect_false(any(.info$fns))
+  expect_error(.linCmtCarryLiveTest(0L, 1, 0, matrix(1, 1, 7), 1L, 0L, 1L, -5L, 0L),
+               "not linked")
 })

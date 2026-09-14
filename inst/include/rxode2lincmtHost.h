@@ -22,11 +22,16 @@
  */
 #include <stddef.h>
 
+/* Array sizes are part of the contract: fixed here, never taken from the
+   includer.  RXLC_HOST_STATIC_CHECKS fails rxode2's compile if its own
+   RX_LINCMT_* values ever differ. */
+#define RXLC_CARRY_MAXPAIRS 8
+#define RXLC_ORIGIN_MAX 4
 #ifndef RX_LINCMT_CARRY_MAXPAIRS
-#define RX_LINCMT_CARRY_MAXPAIRS 8
+#define RX_LINCMT_CARRY_MAXPAIRS RXLC_CARRY_MAXPAIRS
 #endif
 #ifndef RX_LINCMT_ORIGIN_MAX
-#define RX_LINCMT_ORIGIN_MAX 4
+#define RX_LINCMT_ORIGIN_MAX RXLC_ORIGIN_MAX
 #endif
 
 /* X(struct, field, type, arraySuffix); struct is rx, op or ind */
@@ -75,14 +80,14 @@
   X(ind, linCmtRateHist, double*, )                                          \
   X(ind, linCmtRateHistCap, int, )                                           \
   X(ind, linCmtRateHistW, int, )                                             \
-  X(ind, linCmtCarryT, double, [4*RX_LINCMT_CARRY_MAXPAIRS])                 \
+  X(ind, linCmtCarryT, double, [4*RXLC_CARRY_MAXPAIRS])                 \
   X(ind, linCmtCarryTlast, double, )                                         \
   X(ind, linCmtCarryPrevTheta, double, [7])                                  \
   X(ind, linCmtCarryVarying, int, )                                          \
   X(ind, linCmtBind, void*, )                                                \
-  X(ind, linCmtOrigin, double, [RX_LINCMT_ORIGIN_MAX*RX_LINCMT_ORIGIN_MAX])  \
+  X(ind, linCmtOrigin, double, [RXLC_ORIGIN_MAX*RXLC_ORIGIN_MAX])  \
   X(ind, linCmtOriginSeeded, int, )                                          \
-  X(ind, linCmtOriginOut, double, [RX_LINCMT_ORIGIN_MAX*RX_LINCMT_ORIGIN_MAX]) \
+  X(ind, linCmtOriginOut, double, [RXLC_ORIGIN_MAX*RXLC_ORIGIN_MAX]) \
   X(ind, linCmtOriginOutSeeded, int, )                                       \
   X(ind, linCmtOriginIdx, int, )                                             \
   X(ind, linCmtOriginSS, int, )                                              \
@@ -113,7 +118,12 @@
 #define RXLC_CHECK1_(s, f, t, d)                                             \
   static_assert(std::is_same<decltype(((RXLC_STRUCT_##s*)0)->f), t d>::value, \
                 "rxode2lincmt host field type changed: " #s "." #f);
-#define RXLC_HOST_STATIC_CHECKS RXLC_HOST_FIELDS(RXLC_CHECK1_)
+#define RXLC_HOST_STATIC_CHECKS                                              \
+  static_assert(RX_LINCMT_CARRY_MAXPAIRS == RXLC_CARRY_MAXPAIRS,             \
+                "RX_LINCMT_CARRY_MAXPAIRS changed: rxode2lincmt must change with it"); \
+  static_assert(RX_LINCMT_ORIGIN_MAX == RXLC_ORIGIN_MAX,                     \
+                "RX_LINCMT_ORIGIN_MAX changed: rxode2lincmt must change with it"); \
+  RXLC_HOST_FIELDS(RXLC_CHECK1_)
 
 /* "struct_field" names in wire order, for tests */
 #define RXLC_NAME1_(s, f, t, d) #s "_" #f,

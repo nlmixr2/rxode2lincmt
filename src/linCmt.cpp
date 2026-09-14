@@ -1876,6 +1876,9 @@ NumericVector linCmtCarryLiveTest(int id, NumericVector t, NumericVector tPrior,
                                    IntegerVector which1, IntegerVector which2,
                                    Nullable<NumericVector> addVal = R_NilValue) {
   rx_solve *rx = getRxSolve_();
+  if (rx == NULL) {
+    Rcpp::stop("'.linCmtCarryLiveTest' needs a solve from rxode2, which is not linked");
+  }
   rx_solving_options_ind *ind = RX_IND(rx, id);
   int n = t.size();
   if (theta.nrow() != n || theta.ncol() != 7) {
