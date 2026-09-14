@@ -17,6 +17,7 @@ different.
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://nlmixr2.github.io/rxode2lincmt/}
   \item \url{https://github.com/nlmixr2/rxode2lincmt/}
   \item Report bugs at \url{https://github.com/nlmixr2/rxode2lincmt/issues/}
 }
@@ -28,6 +29,11 @@ Useful links:
 Authors:
 \itemize{
   \item Matthew L. Fidler \email{matthew.fidler@gmail.com} (\href{https://orcid.org/0000-0001-8538-6691}{ORCID})
+}
+
+Other contributors:
+\itemize{
+  \item Richard Upton [contributor]
 }
 
 }

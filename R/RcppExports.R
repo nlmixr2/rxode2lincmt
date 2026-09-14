@@ -113,25 +113,49 @@ linCmtModelDouble <- function(dt, p1, v1, p2, p3, p4, p5, ka, alastNV, rateNV, n
     .Call(`_rxode2lincmt_linCmtCarryFastStats`, reset)
 }
 
-#' Internal test/benchmark hook
+#' Drive linCmtB() carry sentinels on a solved subject (test hook)
 #'
-#' @noRd
+#' Replays linCmtB() calls for one subject of the most recent rxode2 solve
+#' in the same session, the way that subject's output pass would, so tests
+#' can check the carry sentinels.  Needs rxode2 to be loaded and a solve to
+#' have run.
+#'
+#' @param id 0-based subject index in the most recent solve
+#' @param t output time of each row
+#' @param tPrior time of the preceding row (0 for the first row)
+#' @param theta numeric matrix with one row per element of `t` and 7
+#'   columns: p1, v1, p2, p3, p4, p5, ka
+#' @param ncmt number of compartments, 1 to 3
+#' @param oral0 1 when the model has a depot compartment, otherwise 0
+#' @param trans parameterization number
+#' @param which1 per-row `which1` argument passed to linCmtB()
+#' @param which2 per-row `which2` argument passed to linCmtB()
+#' @param addVal for rows with `which1 = -7`, the value to add (passed in
+#'   the p2 argument); `NULL` for none
+#' @return numeric vector of linCmtB() results, one per row
+#' @keywords internal
 #' @export
 .linCmtCarryLiveTest <- function(id, t, tPrior, theta, ncmt, oral0, trans, which1, which2, addVal = NULL) {
     .Call(`_rxode2lincmt_linCmtCarryLiveTest`, id, t, tPrior, theta, ncmt, oral0, trans, which1, which2, addVal)
 }
 
-#' Internal test/benchmark hook
+#' Sensitivity methods linCmtB() has used (test hook)
 #'
-#' @noRd
+#' @param reset logical; when `TRUE` clear the record after reading it
+#' @return integer vector of the `sensType` codes linCmtB() computed a
+#'   Jacobian with since the last reset
+#' @keywords internal
 #' @export
 .linCmtBSensTypesSeen <- function(reset) {
     .Call(`_rxode2lincmt_linCmtBSensTypesSeen`, reset)
 }
 
-#' Internal test/benchmark hook
+#' Number of threads linCmtB() has run on (test hook)
 #'
-#' @noRd
+#' @param reset logical; when `TRUE` clear the record after reading it
+#' @return integer count of the distinct thread slots linCmtB() ran on
+#'   since the last reset
+#' @keywords internal
 #' @export
 .linCmtBThreadsSeen <- function(reset) {
     .Call(`_rxode2lincmt_linCmtBThreadsSeen`, reset)
