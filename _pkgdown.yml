@@ -1,0 +1,13 @@
+url: https://nlmixr2.github.io/rxode2lincmt/
+template:
+  bootstrap: 5
+  params:
+    bootswatch: flatly
+reference:
+- title: Linear compartment solutions
+  desc: Analytic one, two and three compartment solutions and their building blocks.
+  contents:
+  - linCmtModelDouble
+  - linCmtMicros
+  - solComp2
+  - solComp3
