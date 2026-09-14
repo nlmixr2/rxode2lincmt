@@ -7,7 +7,7 @@
 #include <stan/math.hpp>
 #include "macros2micros.h"
 
-extern "C" SEXP _rxode2_macros2micros(SEXP p1, SEXP v1,
+extern "C" SEXP _rxode2lincmt_macros2micros(SEXP p1, SEXP v1,
                                       SEXP p2, SEXP p3,
                                       SEXP p4, SEXP p5,
                                       SEXP trans, SEXP ncmtS) {

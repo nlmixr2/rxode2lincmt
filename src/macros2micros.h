@@ -35,7 +35,6 @@
 #undef BEFORE_RCPP_FALSE
 #endif
 
-#include "../inst/include/rxode2parse.h"
 
 namespace stan {
   namespace math {

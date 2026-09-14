@@ -10,7 +10,6 @@
 #define max2( a , b )  ( (a) > (b) ? (a) : (b) )
 #include "rxProtect.h"
 
-extern "C" void _rxode2parse_unprotect(void);
 
 static inline void parTransPtr(int *transp,
                               double *p1, double *v1,
@@ -656,7 +655,7 @@ extern "C" SEXP derived3(int trans, SEXP inp, double dig) {
 }
 
 
-extern "C" SEXP _rxode2_calcDerived(SEXP ncmtSXP,
+extern "C" SEXP _rxode2lincmt_calcDerived(SEXP ncmtSXP,
                                     SEXP oralSXP,
                                     SEXP w2SXP,
                                     SEXP transSXP, SEXP inp, SEXP sigdigSXP) {
@@ -689,11 +688,9 @@ BEGIN_RCPP
       return derived3(trans, inp, dig);
       break;
     default:
-      _rxode2parse_unprotect();
       (Rf_errorcall)(R_NilValue, _("'ncmt' needs to be 1-3"));
     }
   } else {
-    _rxode2parse_unprotect();
     (Rf_errorcall)(R_NilValue, _("'inp' needs to be list/data frame"));
   }
   return R_NilValue;

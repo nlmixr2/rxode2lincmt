@@ -6,13 +6,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
-#include "rxomp.h"
-#include "../inst/include/rxode2.h"
-#include "timsort.h"
-#define SORT gfx::timsort
+#include "lcOmp.h"
+#include "lcHost.h"
 #include "linCmt.h"
 #include "linCmtSensType.h"
-#include "../inst/include/rxode2EventTranslate.h"
 
 #ifdef RXODE2_NO_STAN_TBB_OBSERVER
 // stan-math's init_chainablestack.hpp is kept out of the build (no linkable
@@ -25,9 +22,6 @@ stan::math::ChainableStack rxode2MainThreadAdTape;
 }
 #endif
 
-extern rx_solving_options op_global;
-extern t_update_inis update_inis;
-extern "C" rx_solve *getRxSolve_(void);
 extern "C" double linCmtB(rx_solve *rx, int id,
                           double _t, int linCmt,
                           int ncmt, int oral0,
@@ -405,6 +399,20 @@ extern "C" void linCmtBindFree(rx_solving_options_ind *ind) {
 }
 
 std::vector<linB_t> __linCmtB;
+
+// linCmtB(which1 = -3)'s rate history and (-9/-10)'s per-origin amount
+// history are realloc'd in this DLL, so they are freed here too; rxode2 calls
+// this from rxFreeInd (a free() in its DLL could use a different heap).
+extern "C" void linCmtFreeInd(rx_solving_options_ind *ind) {
+  free(ind->linCmtRateHist);
+  ind->linCmtRateHist = NULL;
+  ind->linCmtRateHistCap = 0;
+  ind->linCmtRateHistW = 0;
+  free(ind->linCmtOriginHist);
+  ind->linCmtOriginHist = NULL;
+  ind->linCmtOriginHistCap = 0;
+  ind->linCmtOriginHistW = 0;
+}
 
 extern "C" void ensureLinCmtB(int nCores) {
   if ((int)__linCmtB.size() < nCores) {

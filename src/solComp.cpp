@@ -9,7 +9,7 @@
 
 #define max2( a , b )  ( (a) > (b) ? (a) : (b) )
 
-extern "C" SEXP _rxode2_solComp2(SEXP k10S, SEXP k12S, SEXP k21S) {
+extern "C" SEXP _rxode2lincmt_solComp2(SEXP k10S, SEXP k12S, SEXP k21S) {
 BEGIN_RCPP
   double k10 = REAL(k10S)[0];
   double k12 = REAL(k12S)[0];
@@ -26,7 +26,7 @@ END_RCPP
 }
 
 
-extern "C" SEXP _rxode2_solComp3(SEXP k10S, SEXP k12S, SEXP k21S,
+extern "C" SEXP _rxode2lincmt_solComp3(SEXP k10S, SEXP k12S, SEXP k21S,
                                  SEXP k13S, SEXP k31S) {
   BEGIN_RCPP
   double k10 = REAL(k10S)[0];

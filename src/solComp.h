@@ -11,7 +11,6 @@
 #include <Rcpp.h>
 #include <RcppEigen.h>
 
-#include "../inst/include/rxode2parse.h"
 
 namespace stan {
   namespace math {

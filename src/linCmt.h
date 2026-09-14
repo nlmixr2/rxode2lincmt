@@ -5,9 +5,7 @@
 #include "solComp.h"
 #include "linCmtDualN.h"
 #include "linCmtDiffConstant.h"
-#include "../inst/include/rxode2parseHandleEvid.h"
-#include "../inst/include/rxode2parseGetTime.h"
-#include "par_solve.h"
+#include "lcHost.h"
 // This StanHeaders' <stan/math.hpp> (pulled in by macros2micros.h) only
 // includes the reverse-mode library, so forward-mode AD (stan::math::fvar,
 // used by linCmtFwdJac) must be requested explicitly, after the reverse-mode
