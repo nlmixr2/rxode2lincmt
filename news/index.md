@@ -1,0 +1,18 @@
+# Changelog
+
+## rxode2lincmt 0.1.0
+
+### New features
+
+- Initial release. The analytic one, two and three compartment linear
+  solutions, their ‘stan’ gradients, the eigen decompositions
+  ([`solComp2()`](https://nlmixr2.github.io/rxode2lincmt/reference/solComp2.md),
+  [`solComp3()`](https://nlmixr2.github.io/rxode2lincmt/reference/solComp3.md))
+  and the derived-parameter conversions behind `rxode2::rxDerived()`
+  moved here from ‘rxode2’, so ‘rxode2’ no longer compiles ‘stan’.
+  ‘rxode2’ reaches the compiled kernels through an external-pointer
+  table and hands this package the struct offsets it needs, so neither
+  package shares struct layouts with the other.
+
+- The closed-form solutions follow the idea of the ‘wnl’ package by
+  Kyun-Seop Bae; the implementation here is different.
