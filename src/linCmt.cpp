@@ -33,7 +33,7 @@ extern "C" double linCmtB(rx_solve *rx, int id,
                           double ka);
 
 
-#define getLinRate ind->InfusionRate + op->linOffset
+#define getLinRate IND(ind, InfusionRate) + OPT(op, linOffset)
 #define isSameTime(xout, xp) (fabs((xout)-(xp)) <= 2.0*DBL_EPSILON*max2(fabs(xout),fabs(xp)))
 
 // What does this individual's REGIMEN look like, as far as the dose-time
@@ -101,11 +101,11 @@ static inline void linCmtDoseScan(rx_solving_options_ind *ind,
                                   int *dosedMask, int *ssInf,
                                   int *ssInfMask = NULL, int *unsplit = NULL) {
   int mask = 0, ss = 0, ssMask = 0, rm = 0;
-  int nLin = op->numLin < 31 ? op->numLin : 31;
-  for (int i = 0; i < ind->ndoses; ++i) {
+  int nLin = OPT(op, numLin) < 31 ? OPT(op, numLin) : 31;
+  for (int i = 0; i < IND(ind, ndoses); ++i) {
     int wh, cmt, wh100, whI, wh0;
-    getWh(getEvid(ind, ind->idose[i]), &wh, &cmt, &wh100, &whI, &wh0);
-    int c = cmt - op->linOffset;
+    getWh(getEvid(ind, IND(ind, idose)[i]), &wh, &cmt, &wh100, &whI, &wh0);
+    int c = cmt - OPT(op, linOffset);
     if (c < 0 || c >= nLin) continue;   // not part of the linear system
     if ((wh0 == EVID0_SS0 || wh0 == EVID0_SS || wh0 == EVID0_SS20 ||
          wh0 == EVID0_SS2 || wh0 == EVID0_SSINF) &&
@@ -141,24 +141,24 @@ static inline void linCmtDoseScan(rx_solving_options_ind *ind,
 // somehow was not, rather than a case expected to occur.
 static inline double *linCmtBRateSlot(rx_solving_options_ind *ind, int idx, int width, int grow) {
   if (idx < 0 || width <= 0) return NULL;
-  if (ind->linCmtRateHistW != width) {
-    free(ind->linCmtRateHist);
-    ind->linCmtRateHist = NULL;
-    ind->linCmtRateHistCap = 0;
-    ind->linCmtRateHistW = width;
+  if (IND(ind, linCmtRateHistW) != width) {
+    free(IND(ind, linCmtRateHist));
+    IND(ind, linCmtRateHist) = NULL;
+    IND(ind, linCmtRateHistCap) = 0;
+    IND(ind, linCmtRateHistW) = width;
   }
-  if (idx >= ind->linCmtRateHistCap) {
+  if (idx >= IND(ind, linCmtRateHistCap)) {
     if (!grow) return NULL;
-    int newCap = ind->linCmtRateHistCap > 0 ? ind->linCmtRateHistCap : 64;
+    int newCap = IND(ind, linCmtRateHistCap) > 0 ? IND(ind, linCmtRateHistCap) : 64;
     while (idx >= newCap) newCap *= 2;
-    double *np = (double*) realloc(ind->linCmtRateHist, (size_t)newCap * width * sizeof(double));
+    double *np = (double*) realloc(IND(ind, linCmtRateHist), (size_t)newCap * width * sizeof(double));
     if (np == NULL) (Rf_error)("cannot allocate linCmt rate history");
-    memset(np + (size_t)ind->linCmtRateHistCap * width, 0,
-           (size_t)(newCap - ind->linCmtRateHistCap) * width * sizeof(double));
-    ind->linCmtRateHist = np;
-    ind->linCmtRateHistCap = newCap;
+    memset(np + (size_t)IND(ind, linCmtRateHistCap) * width, 0,
+           (size_t)(newCap - IND(ind, linCmtRateHistCap)) * width * sizeof(double));
+    IND(ind, linCmtRateHist) = np;
+    IND(ind, linCmtRateHistCap) = newCap;
   }
-  return ind->linCmtRateHist + (size_t)idx * width;
+  return IND(ind, linCmtRateHist) + (size_t)idx * width;
 }
 
 // Per-idx cache of the per-origin decomposition of the linCmt() amounts
@@ -173,24 +173,24 @@ static inline double *linCmtBRateSlot(rx_solving_options_ind *ind, int idx, int 
 #define RX_LINCMT_ORIGIN_SLOTW(m) ((m)*RX_LINCMT_ORIGIN_MAX + 1)
 static inline double *linCmtOriginSlot(rx_solving_options_ind *ind, int idx, int width, int grow) {
   if (idx < 0 || width <= 0) return NULL;
-  if (ind->linCmtOriginHistW != width) {
-    free(ind->linCmtOriginHist);
-    ind->linCmtOriginHist = NULL;
-    ind->linCmtOriginHistCap = 0;
-    ind->linCmtOriginHistW = width;
+  if (IND(ind, linCmtOriginHistW) != width) {
+    free(IND(ind, linCmtOriginHist));
+    IND(ind, linCmtOriginHist) = NULL;
+    IND(ind, linCmtOriginHistCap) = 0;
+    IND(ind, linCmtOriginHistW) = width;
   }
-  if (idx >= ind->linCmtOriginHistCap) {
+  if (idx >= IND(ind, linCmtOriginHistCap)) {
     if (!grow) return NULL;
-    int newCap = ind->linCmtOriginHistCap > 0 ? ind->linCmtOriginHistCap : 64;
+    int newCap = IND(ind, linCmtOriginHistCap) > 0 ? IND(ind, linCmtOriginHistCap) : 64;
     while (idx >= newCap) newCap *= 2;
-    double *np = (double*) realloc(ind->linCmtOriginHist, (size_t)newCap * width * sizeof(double));
+    double *np = (double*) realloc(IND(ind, linCmtOriginHist), (size_t)newCap * width * sizeof(double));
     if (np == NULL) (Rf_error)("cannot allocate linCmt origin history");
-    memset(np + (size_t)ind->linCmtOriginHistCap * width, 0,
-           (size_t)(newCap - ind->linCmtOriginHistCap) * width * sizeof(double));
-    ind->linCmtOriginHist = np;
-    ind->linCmtOriginHistCap = newCap;
+    memset(np + (size_t)IND(ind, linCmtOriginHistCap) * width, 0,
+           (size_t)(newCap - IND(ind, linCmtOriginHistCap)) * width * sizeof(double));
+    IND(ind, linCmtOriginHist) = np;
+    IND(ind, linCmtOriginHistCap) = newCap;
   }
-  return ind->linCmtOriginHist + (size_t)idx * width;
+  return IND(ind, linCmtOriginHist) + (size_t)idx * width;
 }
 
 // The rate slot feeding linCmt block compartment `q`, or -1 when nothing can
@@ -385,16 +385,16 @@ typedef struct linCmtBind_s {
 // rxFreeInd().  One individual is only ever solved by one thread at a time,
 // so this needs no locking.
 static inline linCmtBind &linCmtBindGet(rx_solving_options_ind *ind) {
-  if (ind->linCmtBind == NULL) {
-    ind->linCmtBind = (void*) new linCmtBind();
+  if (IND(ind, linCmtBind) == NULL) {
+    IND(ind, linCmtBind) = (void*) new linCmtBind();
   }
-  return *((linCmtBind*)(ind->linCmtBind));
+  return *((linCmtBind*)(IND(ind, linCmtBind)));
 }
 
 extern "C" void linCmtBindFree(rx_solving_options_ind *ind) {
-  if (ind->linCmtBind != NULL) {
-    delete ((linCmtBind*)(ind->linCmtBind));
-    ind->linCmtBind = NULL;
+  if (IND(ind, linCmtBind) != NULL) {
+    delete ((linCmtBind*)(IND(ind, linCmtBind)));
+    IND(ind, linCmtBind) = NULL;
   }
 }
 
@@ -404,14 +404,14 @@ std::vector<linB_t> __linCmtB;
 // history are realloc'd in this DLL, so they are freed here too; rxode2 calls
 // this from rxFreeInd (a free() in its DLL could use a different heap).
 extern "C" void linCmtFreeInd(rx_solving_options_ind *ind) {
-  free(ind->linCmtRateHist);
-  ind->linCmtRateHist = NULL;
-  ind->linCmtRateHistCap = 0;
-  ind->linCmtRateHistW = 0;
-  free(ind->linCmtOriginHist);
-  ind->linCmtOriginHist = NULL;
-  ind->linCmtOriginHistCap = 0;
-  ind->linCmtOriginHistW = 0;
+  free(IND(ind, linCmtRateHist));
+  IND(ind, linCmtRateHist) = NULL;
+  IND(ind, linCmtRateHistCap) = 0;
+  IND(ind, linCmtRateHistW) = 0;
+  free(IND(ind, linCmtOriginHist));
+  IND(ind, linCmtOriginHist) = NULL;
+  IND(ind, linCmtOriginHistCap) = 0;
+  IND(ind, linCmtOriginHistW) = 0;
 }
 
 extern "C" void ensureLinCmtB(int nCores) {
@@ -430,7 +430,7 @@ static inline void linCmtBsetModel(linB_t &lcb, linCmtBind &wsp,
                                    int linSS, rx_solve *rx) {
   wsp.memoIdx = -1; // reshape invalidates the last-row value memo
   wsp.liteIdx = -1;
-  lcb.lc.setModelType(ncmt, oral0, trans, linSS, rx->ndiff);
+  lcb.lc.setModelType(ncmt, oral0, trans, linSS, RXS(rx, ndiff));
   int npars = lcb.lc.getNpars();
   lcb.fx = Eigen::Matrix<double, Eigen::Dynamic, 1>(ncmt + oral0);
   lcb.J = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>::Constant(ncmt + oral0, npars, NA_REAL);
@@ -439,7 +439,7 @@ static inline void linCmtBsetModel(linB_t &lcb, linCmtBind &wsp,
   lcb.Jg = Eigen::Matrix<double, Eigen::Dynamic, 1>(npars);
   lcb.yp = Eigen::Matrix<double, Eigen::Dynamic, 1>(ncmt + oral0);
   lcb.g = Eigen::Matrix<double, Eigen::Dynamic, 2>(ncmt, 2);
-  lcb.lc.setForwardOpts(rx->linCmtSuspect, rx->linCmtForwardMax);
+  lcb.lc.setForwardOpts(RXS(rx, linCmtSuspect), RXS(rx, linCmtForwardMax));
 }
 
 #define linCmtBaddrTheta 0
@@ -1833,7 +1833,7 @@ NumericVector linCmtCarryLiveTest(int id, NumericVector t, NumericVector tPrior,
                                    IntegerVector which1, IntegerVector which2,
                                    Nullable<NumericVector> addVal = R_NilValue) {
   rx_solve *rx = getRxSolve_();
-  rx_solving_options_ind *ind = &(rx->subjects[id]);
+  rx_solving_options_ind *ind = &(RXS(rx, subjects)[id]);
   int n = t.size();
   if (theta.nrow() != n || theta.ncol() != 7) {
     Rcpp::stop("theta must be length(t) x 7 (p1, v1, p2, p3, p4, p5, ka)");
@@ -1849,8 +1849,8 @@ NumericVector linCmtCarryLiveTest(int id, NumericVector t, NumericVector tPrior,
                    pair, which2[i], m, RX_LINCMT_CARRY_MAXPAIRS);
       }
     }
-    ind->idx = i;
-    ind->tprior = tPrior[i];
+    IND(ind, idx) = i;
+    IND(ind, tprior) = tPrior[i];
     // The -5 advance derives its interval from its own previous invocation
     // time (ind->linCmtCarryTlast) rather than ind->tprior (stale in the
     // post-solve lhs pass) -- seed it per call so this harness keeps its
@@ -1859,8 +1859,8 @@ NumericVector linCmtCarryLiveTest(int id, NumericVector t, NumericVector tPrior,
     // constant-theta skip and its callers (the phase 2/3b.2 benches) assert
     // the full M-advance semantics, constant theta included.
     if (which1[i] == -5) {
-      ind->linCmtCarryTlast = tPrior[i];
-      ind->linCmtCarryVarying = 2;
+      IND(ind, linCmtCarryTlast) = tPrior[i];
+      IND(ind, linCmtCarryVarying) = 2;
     }
     double p2i = which1[i] == -7 ? av[i] : theta(i, 2);
     out[i] = linCmtB(rx, id, t[i], 0, ncmt, oral0, which1[i], which2[i], trans,
@@ -1977,50 +1977,50 @@ extern "C" double linCmtA(rx_solve *rx, int id,
 #define lc    lca.lc
 #define theta lca.theta
 #define yp    lca.yp
-  rx_solving_options_ind *ind = &(rx->subjects[id]);
-  rx_solving_options *op = rx->op;
+  rx_solving_options_ind *ind = &(RXS(rx, subjects)[id]);
+  rx_solving_options *op = RXS(rx, op);
   // get the linear solved system object.
   // rx_get_thread() honors the cross-DLL thread-id override (see rxData.cpp /
   // setRxThreadId): under an external OpenMP team rxode2's omp_get_thread_num()
   // would return 0 for every worker, collapsing this per-thread linCmt scratch
   // onto slot 0.  __linCmtB (line ~489) already uses rx_get_thread().
   linA_t &lca = __linCmtA[rx_get_thread((int)__linCmtA.size())];
-  int idx = ind->idx;
+  int idx = IND(ind, idx);
   // Create the solved system object
-  if (!lc.isSame(ncmt, oral0, trans, rx->ndiff)) {
-    lc.setModelType(ncmt, oral0, trans, ind->linSS, rx->ndiff);
+  if (!lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
+    lc.setModelType(ncmt, oral0, trans, IND(ind, linSS), RXS(rx, ndiff));
     // only resize when needed
     theta = Eigen::Matrix<double, Eigen::Dynamic, 1>(lc.getNpars());
     fx = Eigen::Matrix<double, Eigen::Dynamic, 1>(ncmt + oral0);
     yp = Eigen::Matrix<double, Eigen::Dynamic, 1>(ncmt + oral0, 1);
     lca.gg = Eigen::Matrix<double, Eigen::Dynamic, 2>(ncmt, 2);
   } else {
-    lc.setSsType(ind->linSS);
+    lc.setSsType(IND(ind, linSS));
   }
-  if (ind->linSS == linCmtSsInf) {
-    lc.setSsInf(ind->linSSvar, ind->linSStau);
-  } else if (ind->linSS == linCmtSsBolus) {
-    lc.setSsBolus(ind->linSSvar, ind->linSStau, ind->linSSbolusCmt);
+  if (IND(ind, linSS) == linCmtSsInf) {
+    lc.setSsInf(IND(ind, linSSvar), IND(ind, linSStau));
+  } else if (IND(ind, linSS) == linCmtSsBolus) {
+    lc.setSsBolus(IND(ind, linSSvar), IND(ind, linSStau), IND(ind, linSSbolusCmt));
   }
 
   // Get number of items in Alast
   int nAlast = lc.getNalast();
 
   // Get/Set the pointers
-  double *asave = ind->linCmtSave;
+  double *asave = IND(ind, linCmtSave);
   double *r = getLinRate;
   double *a;
-  if (ind->linCmtAlast == NULL) {
-    a = getAdvan(ind->solvedIdx);
+  if (IND(ind, linCmtAlast) == NULL) {
+    a = getAdvan(IND(ind, solvedIdx));
   } else {
-    a = ind->linCmtAlast;
+    a = IND(ind, linCmtAlast);
   }
   lc.setPtr(a, r, asave);
   // Setup parameter matrix
   linCmtFillTheta(theta, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
 
   // Here we restore the last solved value
-  if (!ind->doSS && ind->solvedIdx >= idx) {
+  if (!IND(ind, doSS) && IND(ind, solvedIdx) >= idx) {
     double *acur = getAdvan(idx);
     if (which < 0) {
       lc.restoreFxTo(acur, fx);
@@ -2031,7 +2031,7 @@ extern "C" double linCmtA(rx_solve *rx, int id,
   }
   // Currently this may not have been calculated, calculate now
   if (which < 0) {
-    if (ind->_rxFlag == 11) {
+    if (IND(ind, _rxFlag) == 11) {
       // If we are calculating the LHS values or other values, these are
       // stored in the corresponding compartments.
       //
@@ -2057,10 +2057,10 @@ extern "C" double linCmtA(rx_solve *rx, int id,
       // Get/Set the dt; This is only applicable in the ODE/linCmt() case
 
       double dt;
-      if (ind->doSS) {
-        dt = ind->tout - ind->tprior;
+      if (IND(ind, doSS)) {
+        dt = IND(ind, tout) - IND(ind, tprior);
       } else {
-        dt =  _t - ind->tprior;
+        dt =  _t - IND(ind, tprior);
       }
       lc.setDt(dt);
 
@@ -2068,13 +2068,13 @@ extern "C" double linCmtA(rx_solve *rx, int id,
 
       fx = lc(theta);
     }
-    return lc.adjustF(fx, theta, ind->linCmtHV);
+    return lc.adjustF(fx, theta, IND(ind, linCmtHV));
   } else if (which >= 0 && which < nAlast) {
     // Return the amount in the linear compartment model
     // which can be depot, central, peripheral, second peripheral
     // This assumes that the function value is the first
-    if (ind->_rxFlag != 11) {
-      return ind->linCmtSave[which];
+    if (IND(ind, _rxFlag) != 11) {
+      return IND(ind, linCmtSave)[which];
     } else {
       double *acur = getAdvan(idx);
       return acur[which];
@@ -2156,8 +2156,8 @@ static inline double linCmtBdoseTime(stan::math::linCmtStan &lc,
   // only be decided here.  With no modeled alag() declared on any linCmt()
   // compartment there is nothing to compare against -- the caller is asking
   // for a delay it applies to every dose itself, so answer as before.
-  if (op->linCmtLagMask != 0) {
-    if ((dosed & op->linCmtLagMask) == 0) {
+  if (OPT(op, linCmtLagMask) != 0) {
+    if ((dosed & OPT(op, linCmtLagMask)) == 0) {
       // No dose reaches a lagged compartment, so the amounts do not depend on
       // the delay at all: the derivative is exactly 0, whatever the rest of
       // the regimen looks like.  (The IV arm of a paired IV/oral design lands
@@ -2168,7 +2168,7 @@ static inline double linCmtBdoseTime(stan::math::linCmtStan &lc,
       // question whose answer is 0.
       return 0.0;
     }
-    if ((dosed & ~op->linCmtLagMask) != 0) {
+    if ((dosed & ~OPT(op, linCmtLagMask)) != 0) {
       // Some doses are delayed and some are not, so there is no single delay
       // to differentiate wrt.  Refuse rather than return the single-delay
       // answer, which is biased by the undelayed doses' contribution -- see
@@ -2252,13 +2252,13 @@ static inline void linCmtOriginCacheRow(rx_solving_options_ind *ind, int idx, in
 // SS solve and the normal advance that follows it at the SAME idx, so
 // ind->linSS is part of the row's identity.
 static inline void linCmtOriginRollForward(rx_solving_options_ind *ind, int idx) {
-  if (ind->linCmtOriginIdx == idx && ind->linCmtOriginSS == ind->linSS) return;
-  if (ind->linCmtOriginIdx >= 0) {
-    memcpy(ind->linCmtOrigin, ind->linCmtOriginOut, sizeof(ind->linCmtOrigin));
-    ind->linCmtOriginSeeded = ind->linCmtOriginOutSeeded;
+  if (IND(ind, linCmtOriginIdx) == idx && IND(ind, linCmtOriginSS) == IND(ind, linSS)) return;
+  if (IND(ind, linCmtOriginIdx) >= 0) {
+    memcpy(IND(ind, linCmtOrigin), IND(ind, linCmtOriginOut), sizeof(IND(ind, linCmtOrigin)));
+    IND(ind, linCmtOriginSeeded) = IND(ind, linCmtOriginOutSeeded);
   }
-  ind->linCmtOriginIdx = idx;
-  ind->linCmtOriginSS = ind->linSS;
+  IND(ind, linCmtOriginIdx) = idx;
+  IND(ind, linCmtOriginSS) = IND(ind, linSS);
 }
 
 // A steady-state record establishes the amounts analytically, replacing
@@ -2269,9 +2269,9 @@ static inline int linCmtOriginSeedSs(rx_solving_options_ind *ind,
                                      rx_solving_options *op, double *O,
                                      const Eigen::Matrix<double, Eigen::Dynamic, 1> &fx,
                                      int m) {
-  int cmt = (ind->linSS == linCmtSsBolus) ? ind->linSSbolusCmt : ind->cmt;
-  int q0 = cmt - op->linOffset;
-  memset(O, 0, sizeof(ind->linCmtOriginOut));
+  int cmt = (IND(ind, linSS) == linCmtSsBolus) ? IND(ind, linSSbolusCmt) : IND(ind, cmt);
+  int q0 = cmt - OPT(op, linOffset);
+  memset(O, 0, sizeof(IND(ind, linCmtOriginOut)));
   if (q0 < 0 || q0 >= m || (int)fx.size() != m) return 2;
   for (int j = 0; j < m; ++j) O[q0*RX_LINCMT_ORIGIN_MAX + j] = fx(j, 0);
   return 1;
@@ -2291,7 +2291,7 @@ static inline int linCmtOriginStep(stan::math::linCmtStan &lc,
   for (int j = 0; j < m; ++j) {
     double sum = 0.0;
     for (int q = 0; q < m; ++q) sum += O[q*st + j];
-    double base = (sIn == 0 && op->inits != NULL) ? op->inits[op->linOffset + j] : 0.0;
+    double base = (sIn == 0 && OPT(op, inits) != NULL) ? OPT(op, inits)[OPT(op, linOffset) + j] : 0.0;
     O[j*st + j] += aPrev[j] - sum - base;
   }
   if ((int)th.size() != 2*ncmt + oral0) return 2;
@@ -2322,10 +2322,10 @@ static inline void linCmtOriginAdvance(stan::math::linCmtStan &lc,
   const int m = ncmt + oral0;
   if (m <= 0 || m > RX_LINCMT_ORIGIN_MAX) return;
   linCmtOriginRollForward(ind, idx);
-  double *O = ind->linCmtOriginOut;
-  memcpy(O, ind->linCmtOrigin, sizeof(ind->linCmtOriginOut));
-  int sIn = ind->linCmtOriginSeeded, sOut;
-  if (ind->linSS != 0) {
+  double *O = IND(ind, linCmtOriginOut);
+  memcpy(O, IND(ind, linCmtOrigin), sizeof(IND(ind, linCmtOriginOut)));
+  int sIn = IND(ind, linCmtOriginSeeded), sOut;
+  if (IND(ind, linSS) != 0) {
     sOut = linCmtOriginSeedSs(ind, op, O, fx, m);
   } else if (sIn == 2) {
     // Poisoned by an earlier record whose origin could not be identified;
@@ -2334,7 +2334,7 @@ static inline void linCmtOriginAdvance(stan::math::linCmtStan &lc,
   } else {
     sOut = linCmtOriginStep(lc, op, O, aPrev, rate, th, ncmt, oral0, trans, m, sIn);
   }
-  ind->linCmtOriginOutSeeded = sOut;
+  IND(ind, linCmtOriginOutSeeded) = sOut;
   linCmtOriginCacheRow(ind, idx, m, O, sOut);
 }
 
@@ -2590,8 +2590,8 @@ typedef stan::math::fvar<double> linCmtFv;
 // i.e. a standalone re-query after the subject finished solving.
 static inline const double *linCmtBcarryRate(rx_solving_options_ind *ind,
                                              rx_solving_options *op, int idx) {
-  const double *rate = (!ind->doSS && ind->solvedIdx >= idx) ?
-    linCmtBRateSlot(ind, idx, op->numLin, 0) : getLinRate;
+  const double *rate = (!IND(ind, doSS) && IND(ind, solvedIdx) >= idx) ?
+    linCmtBRateSlot(ind, idx, OPT(op, numLin), 0) : getLinRate;
   if (rate == NULL) rate = getLinRate;
   return rate;
 }
@@ -2649,8 +2649,8 @@ static inline double linCmtBtransition(linB_t &lcb, rx_solve *rx,
   int col = which2 / m;
   if (which2 < 0 || col >= m) return NA_REAL;
   // may be the first touch of this slot (a model with no -1 call)
-  if (!lcb.lc.isSame(ncmt, oral0, trans, rx->ndiff)) {
-    linCmtBsetModel(lcb, linCmtBindGet(ind), ncmt, oral0, trans, ind->linSS, rx);
+  if (!lcb.lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
+    linCmtBsetModel(lcb, linCmtBindGet(ind), ncmt, oral0, trans, IND(ind, linSS), rx);
   }
   Eigen::Matrix<linCmtFv, Eigen::Dynamic, 2> gF;
   linCmtFv kaV;
@@ -2659,10 +2659,10 @@ static inline double linCmtBtransition(linB_t &lcb, rx_solve *rx,
   // final interval, see linCmtBcarryAdvance), so the interval is the time
   // since the previous event row in solve order.
   double dt;
-  if (ind->doSS) {
-    dt = ind->tout - ind->tprior;
+  if (IND(ind, doSS)) {
+    dt = IND(ind, tout) - IND(ind, tprior);
   } else {
-    dt = idx > 0 ? _t - getTime(ind->ix[idx - 1], ind) : 0.0;
+    dt = idx > 0 ? _t - getTime(IND(ind, ix)[idx - 1], ind) : 0.0;
   }
   lcb.lc.setDt(dt);
   lcb.lc.setRate(const_cast<double*>(linCmtBcarryRate(ind, op, idx)));
@@ -2681,8 +2681,8 @@ static inline double linCmtBcarryAdd(rx_solving_options_ind *ind, int ncmt, int 
   int row = which2 % m;
   int pair = which2 / m;
   if (which2 < 0 || pair >= RX_LINCMT_CARRY_MAXPAIRS) return NA_REAL;
-  ind->linCmtCarryT[row*RX_LINCMT_CARRY_MAXPAIRS + pair] += p2;
-  return ind->linCmtCarryT[row*RX_LINCMT_CARRY_MAXPAIRS + pair];
+  IND(ind, linCmtCarryT)[row*RX_LINCMT_CARRY_MAXPAIRS + pair] += p2;
+  return IND(ind, linCmtCarryT)[row*RX_LINCMT_CARRY_MAXPAIRS + pair];
 }
 
 // Runtime per-subject fast path for the -5 advance (phase 3b.4): while this
@@ -2704,17 +2704,17 @@ static inline double linCmtBcarryAdd(rx_solving_options_ind *ind, int ncmt, int 
 static inline bool linCmtBcarryFast(rx_solving_options_ind *ind, const double *thNow,
                                     double _t) {
   if (!linCmtCarryFastEnabled) return false;
-  if (ind->linCmtCarryVarying == 0) {
-    memcpy(ind->linCmtCarryPrevTheta, thNow, 7*sizeof(double));
-    ind->linCmtCarryVarying = 1;
-  } else if (ind->linCmtCarryVarying == 1 &&
-             memcmp(ind->linCmtCarryPrevTheta, thNow, 7*sizeof(double)) != 0) {
+  if (IND(ind, linCmtCarryVarying) == 0) {
+    memcpy(IND(ind, linCmtCarryPrevTheta), thNow, 7*sizeof(double));
+    IND(ind, linCmtCarryVarying) = 1;
+  } else if (IND(ind, linCmtCarryVarying) == 1 &&
+             memcmp(IND(ind, linCmtCarryPrevTheta), thNow, 7*sizeof(double)) != 0) {
     // Exact bit compare; any difference (including NaN anywhere) flips
     // permanently to the slow path for this pass.
-    ind->linCmtCarryVarying = 2;
+    IND(ind, linCmtCarryVarying) = 2;
   }
-  if (ind->linCmtCarryVarying == 2) return false;
-  ind->linCmtCarryTlast = _t;
+  if (IND(ind, linCmtCarryVarying) == 2) return false;
+  IND(ind, linCmtCarryTlast) = _t;
 #pragma omp atomic
   linCmtCarryAdvFastN++;
   return true;
@@ -2730,14 +2730,14 @@ static inline void linCmtBcarryApplyM(rx_solving_options_ind *ind, const double 
       double s = 0.0;
       for (int k2 = 0; k2 < m; k2++) {
         s += localM[r*4 + k2] *
-          ind->linCmtCarryT[k2*RX_LINCMT_CARRY_MAXPAIRS + c];
+          IND(ind, linCmtCarryT)[k2*RX_LINCMT_CARRY_MAXPAIRS + c];
       }
       tNew[r*RX_LINCMT_CARRY_MAXPAIRS + c] = s;
     }
   }
   for (int r = 0; r < m; r++) {
     for (int c = 0; c < RX_LINCMT_CARRY_MAXPAIRS; c++) {
-      ind->linCmtCarryT[r*RX_LINCMT_CARRY_MAXPAIRS + c] =
+      IND(ind, linCmtCarryT)[r*RX_LINCMT_CARRY_MAXPAIRS + c] =
         tNew[r*RX_LINCMT_CARRY_MAXPAIRS + c];
     }
   }
@@ -2767,23 +2767,23 @@ static inline double linCmtBcarryAdvance(linB_t &lcb, rx_solve *rx,
   int pair = which2 / m;
   if (which2 < 0 || pair >= RX_LINCMT_CARRY_MAXPAIRS) return NA_REAL;
   int slot = row*RX_LINCMT_CARRY_MAXPAIRS + pair;
-  if (which1 == -6) return ind->linCmtCarryT[slot];
+  if (which1 == -6) return IND(ind, linCmtCarryT)[slot];
 #pragma omp atomic
   linCmtCarryAdvCallsN++;
   double thNow[7] = {p1, v1, p2, p3, p4, p5, ka};
-  if (linCmtBcarryFast(ind, thNow, _t)) return ind->linCmtCarryT[slot];
+  if (linCmtBcarryFast(ind, thNow, _t)) return IND(ind, linCmtCarryT)[slot];
   // may be the first touch of lc on this thread (a standalone re-query)
-  if (!lcb.lc.isSame(ncmt, oral0, trans, rx->ndiff)) {
-    linCmtBsetModel(lcb, linCmtBindGet(ind), ncmt, oral0, trans, ind->linSS, rx);
+  if (!lcb.lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
+    linCmtBsetModel(lcb, linCmtBindGet(ind), ncmt, oral0, trans, IND(ind, linSS), rx);
   }
   // The advance interval is the time since this sentinel's OWN previous
   // invocation: calc_lhs fires once per event row in solve order, but in
   // the post-solve lhs pass ind->tprior is frozen at the solve's final
   // interval.  Tlast is NAN after iniSubject(), so the first row advances
   // over dt = 0 (M = I on a zero carry state).
-  double carryDt = ISNAN(ind->linCmtCarryTlast) ? 0.0 :
-    (_t - ind->linCmtCarryTlast);
-  ind->linCmtCarryTlast = _t;
+  double carryDt = ISNAN(IND(ind, linCmtCarryTlast)) ? 0.0 :
+    (_t - IND(ind, linCmtCarryTlast));
+  IND(ind, linCmtCarryTlast) = _t;
   Eigen::Matrix<linCmtFv, Eigen::Dynamic, 2> gF;
   linCmtFv kaV;
   linCmtBcarryMicros(lcb.lc, ncmt, oral0, trans, p1, v1, p2, p3, p4, p5, ka, gF, kaV);
@@ -2796,7 +2796,7 @@ static inline double linCmtBcarryAdvance(linB_t &lcb, rx_solve *rx,
     for (int r = 0; r < m; r++) localM[r*4 + c] = colOut[r];
   }
   linCmtBcarryApplyM(ind, localM, m);
-  return ind->linCmtCarryT[slot];
+  return IND(ind, linCmtCarryT)[slot];
 }
 
 // Reads of the row's stored Jacobian/amounts/concentration gradient.
@@ -2829,13 +2829,13 @@ static inline double linCmtBoriginQuery(linB_t &lcb, rx_solving_options_ind *ind
                                         int trans,
                                         double p1, double v1, double p2, double p3,
                                         double p4, double p5, double ka) {
-  int reQuery = (!ind->doSS && ind->solvedIdx >= idx);
+  int reQuery = (!IND(ind, doSS) && IND(ind, solvedIdx) >= idx);
   int mOrig = ncmt + oral0;
-  const double *rate = reQuery ? linCmtBRateSlot(ind, idx, op->numLin, 0) : getLinRate;
+  const double *rate = reQuery ? linCmtBRateSlot(ind, idx, OPT(op, numLin), 0) : getLinRate;
   const double *origin = reQuery ?
     linCmtOriginSlot(ind, idx, RX_LINCMT_ORIGIN_SLOTW(mOrig), 0) :
-    ind->linCmtOriginOut;
-  int seeded = ind->linCmtOriginOutSeeded;
+    IND(ind, linCmtOriginOut);
+  int seeded = IND(ind, linCmtOriginOutSeeded);
   if (reQuery) {
     seeded = (origin == NULL) ? 0 : (int)origin[mOrig*RX_LINCMT_ORIGIN_MAX];
   }
@@ -2861,8 +2861,8 @@ static inline bool linCmtBquery(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
   if (which1 == -3) {
     // idx already solved -> a re-query (e.g. the output pass) where
     // ind->InfusionRate has since been cleared/moved on; use the cached rate.
-    const double *rate = (!ind->doSS && ind->solvedIdx >= idx) ?
-      linCmtBRateSlot(ind, idx, op->numLin, 0) : getLinRate;
+    const double *rate = (!IND(ind, doSS) && IND(ind, solvedIdx) >= idx) ?
+      linCmtBRateSlot(ind, idx, OPT(op, numLin), 0) : getLinRate;
     *out = linCmtBdoseTime(lcb.lc, lcb.fx, ind, op, rate, ncmt, oral0, which2,
                            trans, p1, v1, p2, p3, p4, p5, ka);
   } else if (which1 == -4) {
@@ -2877,7 +2877,7 @@ static inline bool linCmtBquery(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
     // Pin this subject's pass to the full -5 advance: a caller feeding -7
     // a contribution that does not telescope (an event jump) must not have
     // the constant-theta fast path skip the M products that propagate it.
-    ind->linCmtCarryVarying = 2;
+    IND(ind, linCmtCarryVarying) = 2;
     *out = 0.0;
   } else if (which1 == -5 || which1 == -6) {
     *out = linCmtBcarryAdvance(lcb, rx, ind, op, idx, _t, ncmt, oral0, which1, which2,
@@ -2889,10 +2889,10 @@ static inline bool linCmtBquery(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
 }
 
 static inline void linCmtBsetupSs(stan::math::linCmtStan &lc, rx_solving_options_ind *ind) {
-  if (ind->linSS == linCmtSsInf) {
-    lc.setSsInf(ind->linSSvar, ind->linSStau);
-  } else if (ind->linSS == linCmtSsBolus) {
-    lc.setSsBolus(ind->linSSvar, ind->linSStau, ind->linSSbolusCmt);
+  if (IND(ind, linSS) == linCmtSsInf) {
+    lc.setSsInf(IND(ind, linSSvar), IND(ind, linSStau));
+  } else if (IND(ind, linSS) == linCmtSsBolus) {
+    lc.setSsBolus(IND(ind, linSSvar), IND(ind, linSStau), IND(ind, linSSbolusCmt));
   }
 }
 
@@ -2901,9 +2901,9 @@ static inline void linCmtBsetupSs(stan::math::linCmtStan &lc, rx_solving_options
 // it for linCmtBdoseTime() (which1 = -3) to read back on a later re-query.
 static inline void linCmtBcacheRate(rx_solving_options_ind *ind, rx_solving_options *op,
                                     int idx, const double *r) {
-  if (op->numLin > 0 && (ind->doSS || ind->solvedIdx < idx)) {
-    double *rslot = linCmtBRateSlot(ind, idx, op->numLin, 1);
-    if (rslot != NULL) std::copy(r, r + op->numLin, rslot);
+  if (OPT(op, numLin) > 0 && (IND(ind, doSS) || IND(ind, solvedIdx) < idx)) {
+    double *rslot = linCmtBRateSlot(ind, idx, OPT(op, numLin), 1);
+    if (rslot != NULL) std::copy(r, r + OPT(op, numLin), rslot);
   }
 }
 
@@ -2951,11 +2951,11 @@ static inline void linCmtBjac(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
   }
   int kind = linCmtBfdKind(sensType);
   if (kind != 0) {
-    linCmtBfdJac(lcb, kind, ind->linH, theta, thetaSens);
+    linCmtBfdJac(lcb, kind, IND(ind, linH), theta, thetaSens);
   } else if (sensType == 31) {
     linCmtRevTapeInit();
     stan::math::jacobian(lcb.lc, thetaSens, lcb.fx, lcb.Js);
-  } else if (linCmtSeqTailJac(lcb, wsp, rx->linCmtSensPhi, id, idx,
+  } else if (linCmtSeqTailJac(lcb, wsp, RXS(rx, linCmtSensPhi), id, idx,
                               sensType == 32)) {
 #pragma omp atomic
     linCmtSeqTailN++;
@@ -2984,7 +2984,7 @@ static inline void linCmtBsolveRow(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
                                    double *a, const double *r, int ncmt, int oral0, int trans,
                                    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> > &theta,
                                    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> > &thetaSens) {
-  if ((!ind->doSS && ind->solvedIdx >= idx) || ind->_rxFlag == 11) {
+  if ((!IND(ind, doSS) && IND(ind, solvedIdx) >= idx) || IND(ind, _rxFlag) == 11) {
 #pragma omp atomic
     linCmtValRestN++;
     double *acur = getAdvan(idx);
@@ -2994,17 +2994,17 @@ static inline void linCmtBsolveRow(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
   }
 #pragma omp atomic
   linCmtValCompN++;
-  lcb.lc.setDt(ind->doSS ? (ind->tout - ind->tprior) : (_t - ind->tprior));
-  if (rx->ndiff != 0 && ind->linCmtHparIndex < -1) {
-    linCmtBjac(lcb, wsp, rx, ind, rx->sensType, id, idx, theta, thetaSens);
+  lcb.lc.setDt(IND(ind, doSS) ? (IND(ind, tout) - IND(ind, tprior)) : (_t - IND(ind, tprior)));
+  if (RXS(rx, ndiff) != 0 && IND(ind, linCmtHparIndex) < -1) {
+    linCmtBjac(lcb, wsp, rx, ind, RXS(rx, sensType), id, idx, theta, thetaSens);
     return;
   }
-  if (rx->ndiff != 0 && ind->linCmtHparIndex >= 0) {
-    thetaSens(ind->linCmtHparIndex, 0) += ind->linCmtH;
+  if (RXS(rx, ndiff) != 0 && IND(ind, linCmtHparIndex) >= 0) {
+    thetaSens(IND(ind, linCmtHparIndex), 0) += IND(ind, linCmtH);
   }
   lcb.lc.linAcalcAlast(lcb.yp, lcb.g, theta);
   lcb.lc.calcFx(thetaSens);
-  lcb.lc.fHCalcJac(thetaSens, ind->linH, lcb.fx, lcb.Js);
+  lcb.lc.fHCalcJac(thetaSens, IND(ind, linH), lcb.fx, lcb.Js);
 }
 
 extern "C" double linCmtB(rx_solve *rx, int id,
@@ -3029,13 +3029,13 @@ extern "C" double linCmtB(rx_solve *rx, int id,
 #pragma omp atomic write
     linCmtBThreadSeen[_tid] = 1;
   }
-  rx_solving_options_ind *ind = &(rx->subjects[id]);
+  rx_solving_options_ind *ind = &(RXS(rx, subjects)[id]);
   // The individual's own carried state: window + value memo.  Because it
   // belongs to the individual, none of the keys below need the subject id
   // any more -- this block IS the subject.
   linCmtBind &wsp = linCmtBindGet(ind);
-  rx_solving_options *op = rx->op;
-  int idx = ind->idx;
+  rx_solving_options *op = RXS(rx, op);
+  int idx = IND(ind, idx);
   if (which1 != -1 || which2 != -1) {
     if (wsp.liteIdx == idx) {
       // The thin value path left J/Jg stale for this row; a call-form
@@ -3054,8 +3054,8 @@ extern "C" double linCmtB(rx_solve *rx, int id,
                      p1, v1, p2, p3, p4, p5, ka, &out)) {
       return out;
     }
-  } else if (!lcb.lc.isSame(ncmt, oral0, trans, rx->ndiff)) {
-    linCmtBsetModel(lcb, wsp, ncmt, oral0, trans, ind->linSS, rx);
+  } else if (!lcb.lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
+    linCmtBsetModel(lcb, wsp, ncmt, oral0, trans, IND(ind, linSS), rx);
   } else {
     // Last-row value memo: the generated model executes this value call
     // many times per row (compute phase and restore path alike); a repeat
@@ -3065,15 +3065,15 @@ extern "C" double linCmtB(rx_solve *rx, int id,
     // linCmtBsetModel).
     const double args[7] = {p1, v1, p2, p3, p4, p5, ka};
     if (wsp.memoIdx == idx && wsp.memoT == _t &&
-        wsp.memoFlag == ind->_rxFlag && wsp.memoDoSS == (int)ind->doSS &&
-        wsp.memoHpar == ind->linCmtHparIndex &&
-        wsp.memoH == ind->linCmtH && wsp.memoHV == ind->linCmtHV &&
+        wsp.memoFlag == IND(ind, _rxFlag) && wsp.memoDoSS == (int)IND(ind, doSS) &&
+        wsp.memoHpar == IND(ind, linCmtHparIndex) &&
+        wsp.memoH == IND(ind, linCmtH) && wsp.memoHV == IND(ind, linCmtHV) &&
         memcmp(wsp.memoArgs, args, sizeof(args)) == 0) {
 #pragma omp atomic
       linCmtMemoHitN++;
       return wsp.memoVal;
     }
-    lcb.lc.setSsType(ind->linSS);
+    lcb.lc.setSsType(IND(ind, linSS));
   }
   // Thin value path (the dydt/calc_lhs consolidation, linCmtB only): an
   // already-solved row's value re-execution (the calc_lhs walk and the
@@ -3083,27 +3083,27 @@ extern "C" double linCmtB(rx_solve *rx, int id,
   // lazily if a call-form query (carry sentinel/read) follows.
   // FD-perturbed evaluations keep the full path.
   if (which1 == -1 && which2 == -1 &&
-      ind->linCmtAlast == NULL && ind->linCmtHparIndex < -1 &&
-      ((!ind->doSS && ind->solvedIdx >= idx) || ind->_rxFlag == 11)) {
+      IND(ind, linCmtAlast) == NULL && IND(ind, linCmtHparIndex) < -1 &&
+      ((!IND(ind, doSS) && IND(ind, solvedIdx) >= idx) || IND(ind, _rxFlag) == 11)) {
     Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
       thetaL(getLinCmtDoubleAddr(lcb, linCmtBaddrTheta), lcb.lc.getNpars());
     linCmtFillTheta(thetaL, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
     lcb.lc.restoreFxTo(getAdvan(idx), lcb.fx);
-    double val = lcb.lc.adjustF(lcb.fx, thetaL, ind->linCmtHV);
+    double val = lcb.lc.adjustF(lcb.fx, thetaL, IND(ind, linCmtHV));
 #pragma omp atomic
     linCmtValLiteN++;
     wsp.liteIdx = idx;
     wsp.memoIdx = idx; wsp.memoT = _t;
-    wsp.memoFlag = ind->_rxFlag; wsp.memoDoSS = (int)ind->doSS;
-    wsp.memoHpar = ind->linCmtHparIndex;
-    wsp.memoH = ind->linCmtH; wsp.memoHV = ind->linCmtHV;
+    wsp.memoFlag = IND(ind, _rxFlag); wsp.memoDoSS = (int)IND(ind, doSS);
+    wsp.memoHpar = IND(ind, linCmtHparIndex);
+    wsp.memoH = IND(ind, linCmtH); wsp.memoHV = IND(ind, linCmtHV);
     wsp.memoArgs[0] = p1; wsp.memoArgs[1] = v1; wsp.memoArgs[2] = p2;
     wsp.memoArgs[3] = p3; wsp.memoArgs[4] = p4; wsp.memoArgs[5] = p5;
     wsp.memoArgs[6] = ka;
     wsp.memoVal = val;
     return val;
   }
-  if (id == 0 && ind->linH[0] == 0) {
+  if (id == 0 && IND(ind, linH)[0] == 0) {
     lcb.lc.resetFlags();
   }
   lcb.lc.setId(id);
@@ -3118,13 +3118,13 @@ extern "C" double linCmtB(rx_solve *rx, int id,
   // isAD (unscaled thetaSens + passthrough trueTheta) is used by every AD
   // jacobian path: forward-mode (3/30/auto), reverse-mode (31). The finite
   // difference methods keep the scaled path.
-  lcb.lc.sensTheta(theta, thetaSens, linCmtSensIsAD(rx->sensType), rx->linCmtScale);
+  lcb.lc.sensTheta(theta, thetaSens, linCmtSensIsAD(RXS(rx, sensType)), RXS(rx, linCmtScale));
   linCmtBsetupSs(lcb.lc, ind);
 
   double *r = getLinRate;
   linCmtBcacheRate(ind, op, idx, r);
-  double *a = (ind->linCmtAlast == NULL) ? getAdvan(ind->solvedIdx) : ind->linCmtAlast;
-  lcb.lc.setPtr(a, r, ind->linCmtSave);
+  double *a = (IND(ind, linCmtAlast) == NULL) ? getAdvan(IND(ind, solvedIdx)) : IND(ind, linCmtAlast);
+  lcb.lc.setPtr(a, r, IND(ind, linCmtSave));
 
   linCmtBsolveRow(lcb, wsp, rx, ind, op, id, idx, _t, a, r, ncmt, oral0, trans, theta, thetaSens);
   // Keep the per-origin decomposition (which1 = -9/-10) in step, but only on
@@ -3132,8 +3132,8 @@ extern "C" double linCmtB(rx_solve *rx, int id,
   // (it would advance the state twice) and never on an H-perturbed
   // evaluation (its amounts belong to a perturbed parameter, not the solve).
   // Opt-in: a model that moves or scales no linCmt() dose pays nothing.
-  if (op->linCmtOriginMask != 0 && ind->_rxFlag != 11) {
-    if (ind->doSS || ind->solvedIdx < idx) {
+  if (OPT(op, linCmtOriginMask) != 0 && IND(ind, _rxFlag) != 11) {
+    if (IND(ind, doSS) || IND(ind, solvedIdx) < idx) {
       // trueTheta(thetaSens) is what linCmtBsolveRow() just advanced the
       // amounts with, H perturbation and ndiff masking included, so the rows
       // stay in step with them on every pass -- an H-optimization probe solve
@@ -3153,17 +3153,17 @@ extern "C" double linCmtB(rx_solve *rx, int id,
       double *slot = (mOrig > 0 && mOrig <= RX_LINCMT_ORIGIN_MAX) ?
         linCmtOriginSlot(ind, idx, RX_LINCMT_ORIGIN_SLOTW(mOrig), 1) : NULL;
       if (slot != NULL && slot[mOrig*RX_LINCMT_ORIGIN_MAX] == 0.0) {
-        linCmtOriginCacheRow(ind, idx, mOrig, ind->linCmtOrigin,
-                             ind->linCmtOriginSeeded);
+        linCmtOriginCacheRow(ind, idx, mOrig, IND(ind, linCmtOrigin),
+                             IND(ind, linCmtOriginSeeded));
       }
     }
   }
   lcb.lc.getJacCp(lcb.J, lcb.fx, theta, lcb.Jg);
-  double val = lcb.lc.adjustF(lcb.fx, theta, ind->linCmtHV);
+  double val = lcb.lc.adjustF(lcb.fx, theta, IND(ind, linCmtHV));
   wsp.memoIdx = idx; wsp.memoT = _t;
-  wsp.memoFlag = ind->_rxFlag; wsp.memoDoSS = (int)ind->doSS;
-  wsp.memoHpar = ind->linCmtHparIndex;
-  wsp.memoH = ind->linCmtH; wsp.memoHV = ind->linCmtHV;
+  wsp.memoFlag = IND(ind, _rxFlag); wsp.memoDoSS = (int)IND(ind, doSS);
+  wsp.memoHpar = IND(ind, linCmtHparIndex);
+  wsp.memoH = IND(ind, linCmtH); wsp.memoHV = IND(ind, linCmtHV);
   wsp.memoArgs[0] = p1; wsp.memoArgs[1] = v1; wsp.memoArgs[2] = p2;
   wsp.memoArgs[3] = p3; wsp.memoArgs[4] = p4; wsp.memoArgs[5] = p5;
   wsp.memoArgs[6] = ka;
