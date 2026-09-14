@@ -21,6 +21,9 @@ Description: Analytic one, two and three compartment linear pharmacokinetic
     (Wang, Hallow and James (2016) <doi:10.1002/psp4.12052>).  Split out of
     'rxode2' so its installation does not compile 'stan' AD items which made it
     take too long to compile by itself.
+    The closed-form solutions follow the idea of the 'wnl' package
+    (Bae, <https://CRAN.R-project.org/package=wnl>), though the
+    implementation here is different.
 BugReports: https://github.com/nlmixr2/rxode2lincmt/issues/
 NeedsCompilation: yes
 License: GPL (>= 3)

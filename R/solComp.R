@@ -1,15 +1,15 @@
 #' Eigenvalues and coefficients of the two compartment model
 #'
 #' Computes the exponents (`L`) and coefficient matrices (`C1`, `C2`) of the
-#' two compartment linear system from its micro-constants, following the
-#' `wnl` package approach.
+#' two compartment linear system from its micro-constants.  The idea comes
+#' from the 'wnl' package by Kyun-Seop Bae; the implementation is different.
 #'
 #' @param k10 elimination rate
 #' @param k12 rate from central to peripheral compartment
 #' @param k21 rate from peripheral to central compartment
 #' @return List with `L` vector and matrices `C1` and `C2`
 #' @export
-#' @author Matthew L. Fidler
+#' @author Matthew L. Fidler, based on the idea in the 'wnl' package
 #' @examples
 #' solComp2(k10 = 0.1, k12 = 3, k21 = 1)
 solComp2 <- function(k10, k12, k21) {
@@ -30,7 +30,7 @@ solComp2 <- function(k10, k12, k21) {
 #' @param k31 rate from peripheral compartment #2 to central
 #' @return List with `L` vector and matrices `C1`, `C2` and `C3`
 #' @export
-#' @author Matthew L. Fidler
+#' @author Matthew L. Fidler, based on the idea in the 'wnl' package
 #' @examples
 #' solComp3(k10 = 0.1, k12 = 3, k21 = 1, k13 = 2, k31 = 0.5)
 solComp3 <- function(k10, k12, k21, k13, k31) {

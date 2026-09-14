@@ -9,3 +9,6 @@
   compiles 'stan'.  'rxode2' reaches the compiled kernels through an
   external-pointer table and hands this package the struct offsets it needs,
   so neither package shares struct layouts with the other.
+
+- The closed-form solutions follow the idea of the 'wnl' package by
+  Kyun-Seop Bae; the implementation here is different.

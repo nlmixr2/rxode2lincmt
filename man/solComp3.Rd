@@ -27,5 +27,5 @@ Eigenvalues and coefficients of the three compartment model
 solComp3(k10 = 0.1, k12 = 3, k21 = 1, k13 = 2, k31 = 0.5)
 }
 \author{
-Matthew L. Fidler
+Matthew L. Fidler, based on the idea in the 'wnl' package
 }

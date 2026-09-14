@@ -18,12 +18,12 @@ List with \code{L} vector and matrices \code{C1} and \code{C2}
 }
 \description{
 Computes the exponents (\code{L}) and coefficient matrices (\code{C1}, \code{C2}) of the
-two compartment linear system from its micro-constants, following the
-\code{wnl} package approach.
+two compartment linear system from its micro-constants.  The idea comes
+from the 'wnl' package by Kyun-Seop Bae; the implementation is different.
 }
 \examples{
 solComp2(k10 = 0.1, k12 = 3, k21 = 1)
 }
 \author{
-Matthew L. Fidler
+Matthew L. Fidler, based on the idea in the 'wnl' package
 }

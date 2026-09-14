@@ -6,7 +6,13 @@
 \alias{rxode2lincmt-package}
 \title{rxode2lincmt: Linear Compartment Model Solutions and Gradients for 'rxode2'}
 \description{
-Analytic one, two and three compartment linear pharmacokinetic solutions with their parameter gradients from 'stan' automatic differentiation (Carpenter et al (2015) \doi{10.48550/arXiv.1509.07164}), eigen decompositions and derived-parameter conversions used by 'rxode2' (Wang, Hallow and James (2016) \doi{10.1002/psp4.12052}). Split out of 'rxode2' so its installation does not compile 'stan'.
+Analytic one, two and three compartment linear pharmacokinetic solutions with their parameter gradients from 'stan' automatic differentiation (Carpenter et al (2015) \doi{10.48550/arXiv.1509.07164}), eigen decompositions and derived-parameter conversions used by 'rxode2' (Wang, Hallow and James (2016) \doi{10.1002/psp4.12052}). Split out of 'rxode2' so its installation does not compile 'stan' AD items which made it take too long to compile by itself. The closed-form solutions follow the idea of the 'wnl' package (Bae, \url{https://CRAN.R-project.org/package=wnl}), though the implementation here is different.
+}
+\details{
+The closed-form linear compartment solutions follow the idea of
+the 'wnl' package by Kyun-Seop Bae
+(\url{https://CRAN.R-project.org/package=wnl}); the implementation here is
+different.
 }
 \seealso{
 Useful links:
@@ -22,7 +28,6 @@ Useful links:
 Authors:
 \itemize{
   \item Matthew L. Fidler \email{matthew.fidler@gmail.com} (\href{https://orcid.org/0000-0001-8538-6691}{ORCID})
-  \item Wenping Wang \email{wwang8198@gmail.com}
 }
 
 }
