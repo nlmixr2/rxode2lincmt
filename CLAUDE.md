@@ -128,7 +128,9 @@ depends on keeping the same compile flags: the `@O2@` compiler probe in
 flags (`-DSTAN_THREADS`, the RcppParallel TBB and StanHeaders include
 directories) built with `system.file()`.  Nothing links or loads TBB:
 `src/lcStanCompat.h` pre-defines the `init_chainablestack.hpp` guard so stan's
-TBB `ad_tape_observer` never compiles; `linCmt.cpp` creates the loading
+TBB `ad_tape_observer` never compiles, and the `reduce_sum`/`map_rect` guards
+so TBB's `partitioner.h` (non-inline static functions calling libtbb, kept by
+`-O0` builds such as `load_all()` and covr) is never included; `linCmt.cpp` creates the loading
 thread's AD tape (`RXODE2_NO_STAN_TBB_OBSERVER`) and `linCmtRevTapeInit()`
 every other thread's.  Loading TBB is what CRAN's gcc-UBSAN check reports, so
 never import 'RcppParallel', call `StanHeaders:::CxxFlags()`/`LdFlags()` (they
