@@ -49,6 +49,8 @@
   <main id="main" class="col-md-9"><div class="section level1">
 <div class="page-header"><h1 id="rxode2lincmt">rxode2lincmt<a class="anchor" aria-label="anchor" href="#rxode2lincmt"></a>
 </h1></div>
+<!-- badges: start -->
+
 <p><code>rxode2lincmt</code> provides the analytic one, two and three compartment linear pharmacokinetic solutions and their parameter gradients that <a href="https://nlmixr2.github.io/rxode2/" class="external-link">rxode2</a>‘s <code>linCmt()</code> uses. The gradients come from ’stan’ automatic differentiation.</p>
 <p>This code used to be compiled inside ‘rxode2’. It lives in its own package so that installing ‘rxode2’ does not compile ‘stan’: ‘rxode2’ imports <code>rxode2lincmt</code> and calls the compiled kernels through an external-pointer table. Most users never call <code>rxode2lincmt</code> directly; they write <code>linCmt()</code> in an ‘rxode2’ or ‘nlmixr2’ model.</p>
 <p>The closed-form solutions follow the idea of the <a href="https://CRAN.R-project.org/package=wnl" class="external-link">wnl</a> package by Kyun-Seop Bae, though the implementation here is different.</p>
@@ -128,7 +130,17 @@
 </ul>
 </div>
 
-
+<div class="dev-status">
+<h2 data-toc-skip>Dev status</h2>
+<ul class="list-unstyled">
+<li><a href="https://github.com/nlmixr2/rxode2lincmt/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/nlmixr2/rxode2lincmt/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a></li>
+<li><a href="https://app.codecov.io/gh/nlmixr2/rxode2lincmt" class="external-link"><img src="https://codecov.io/gh/nlmixr2/rxode2lincmt/graph/badge.svg" alt="Codecov test coverage"></a></li>
+<li><a href="https://cran.r-project.org/package=rxode2lincmt" class="external-link"><img src="http://www.r-pkg.org/badges/version/rxode2lincmt" alt="CRAN version"></a></li>
+<li><a href="https://cran.r-project.org/package=rxode2lincmt" class="external-link"><img src="https://cranlogs.r-pkg.org/badges/grand-total/rxode2lincmt" alt="CRAN total downloads"></a></li>
+<li><a href="https://cran.r-project.org/package=rxode2lincmt" class="external-link"><img src="https://cranlogs.r-pkg.org/badges/rxode2lincmt" alt="CRAN total downloads"></a></li>
+<li><a href="https://www.codefactor.io/repository/github/nlmixr2/rxode2lincmt" class="external-link"><img src="https://www.codefactor.io/repository/github/nlmixr2/rxode2lincmt/badge" alt="CodeFactor"></a></li>
+</ul>
+</div>
 
   </aside>
 </div>
