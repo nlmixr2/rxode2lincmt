@@ -37,6 +37,7 @@
 <div class="section level3">
 <h3 id="new-features-0-1-0">New features<a class="anchor" aria-label="anchor" href="#new-features-0-1-0"></a></h3>
 <ul><li><p>Initial release. The analytic one, two and three compartment linear solutions, their ‘stan’ gradients, the eigen decompositions (<code><a href="../reference/solComp2.html">solComp2()</a></code>, <code><a href="../reference/solComp3.html">solComp3()</a></code>) and the derived-parameter conversions behind <code>rxode2::rxDerived()</code> moved here from ‘rxode2’, so ‘rxode2’ no longer compiles ‘stan’. ‘rxode2’ reaches the compiled kernels through an external-pointer table and hands this package the struct offsets it needs, so neither package shares struct layouts with the other.</p></li>
+<li><p>The package neither links nor loads the TBB library: the ‘stan’ autodiff tapes are created per thread here, so ‘RcppParallel’ is needed only for its headers.</p></li>
 <li><p>The closed-form solutions follow the idea of the ‘wnl’ package by Kyun-Seop Bae; the implementation here is different.</p></li>
 </ul></div>
 </div>

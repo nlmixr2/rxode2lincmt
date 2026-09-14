@@ -93,11 +93,11 @@
 </div>
 <div class="section level3">
 <h3 id="bitwise-parity">Bitwise parity<a class="anchor" aria-label="anchor" href="#bitwise-parity"></a></h3>
-<p>The kernels must give bitwise identical results to rxode2 5.1.7. That depends on keeping the same compile flags: the <code>@O2@</code> compiler probe in <code>inst/tools/workaround.R</code> (<code>-O3 -fno-math-errno -mtune=native</code> for gcc/clang), <code>-DSTAN_THREADS</code> (from StanHeaders), <code>-DEIGEN_DONT_PARALLELIZE</code> and <code>-DBOOST_DISABLE_ASSERTS</code>. Changing any of them is a numeric change.</p>
+<p>The kernels must give bitwise identical results to rxode2 5.1.7. That depends on keeping the same compile flags: the <code>@O2@</code> compiler probe in <code>inst/tools/workaround.R</code> (<code>-O3 -fno-math-errno -mtune=native</code> for gcc/clang), <code>-DSTAN_THREADS</code>, <code>-DEIGEN_DONT_PARALLELIZE</code> and <code>-DBOOST_DISABLE_ASSERTS</code>. Changing any of them is a numeric change.</p>
 </div>
 <div class="section level3">
 <h3 id="stan--tbb-build">Stan / TBB build<a class="anchor" aria-label="anchor" href="#stan--tbb-build"></a></h3>
-<p><code>inst/tools/workaround.R</code> writes <code>src/Makevars(.win)</code>: StanHeaders and RcppParallel compile and link flags, the Windows RcppParallel 6.0.0-6.1.1 no-TBB stripping (which drops <code>-DSTAN_THREADS</code> and pre-defines the <code>init_chainablestack.hpp</code> guard via <code>src/lcStanCompat.h</code>, with <code>linCmt.cpp</code> creating the main-thread AD tape under <code>RXODE2_NO_STAN_TBB_OBSERVER</code>). <code>importFrom(RcppParallel, RcppParallelLibs)</code> loads libtbb before this DLL.</p>
+<p><code>inst/tools/workaround.R</code> writes <code>src/Makevars(.win)</code> with header-only Stan flags (<code>-DSTAN_THREADS</code>, the RcppParallel TBB and StanHeaders include directories) built with <code><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file()</a></code>. Nothing links or loads TBB: <code>src/lcStanCompat.h</code> pre-defines the <code>init_chainablestack.hpp</code> guard so stan’s TBB <code>ad_tape_observer</code> never compiles; <code>linCmt.cpp</code> creates the loading thread’s AD tape (<code>RXODE2_NO_STAN_TBB_OBSERVER</code>) and <code>linCmtRevTapeInit()</code> every other thread’s. Loading TBB is what CRAN’s gcc-UBSAN check reports, so never import ‘RcppParallel’, call <code>StanHeaders:::CxxFlags()</code>/<code>LdFlags()</code> (they load it) or add <code>-ltbb</code>; <code>tests/testthat/test-no-tbb.R</code> guards this.</p>
 </div>
 </div>
 <div class="section level2">
