@@ -1,0 +1,8 @@
+#! /bin/sh
+
+${R_HOME}/bin/R CMD BATCH --no-save --no-restore inst/tools/workaround.R
+rm -f workaround.Rout
+
+echo --------[begin src/Makevars]--------
+cat src/Makevars
+echo --------[end src/Makevars]--------

@@ -1,0 +1,7 @@
+plugins = ["r", "cpp", "generic"]
+
+[sensors.lintr]
+files = ["**/*.R", "**/*.r"]
+
+[sensors.clang-tidy-cpp]
+files = ["**/*.cpp", "**/*.cc", "**/*.cxx", "**/*.hpp", "**/*.hh", "**/*.hxx"]

@@ -1,0 +1,14 @@
+# -*- mode: makefile-gmake -*-
+BH=@BH@
+RCPP=@RCPP@
+EG=@EG@
+SH=@SH@
+CXX_STD = CXX17
+################################################################################
+## Package library flags.
+PKG_LIBS    = $(SHLIB_OPENMP_CXXFLAGS) @SL@
+
+# Same optimization and Stan/Eigen defines as rxode2 had, so the moved
+# kernels produce bitwise identical results.
+PKG_CFLAGS  = @O2@
+PKG_CXXFLAGS = @O2@ $(SHLIB_OPENMP_CXXFLAGS) -DBOOST_DISABLE_ASSERTS -DBOOST_PHOENIX_NO_VARIADIC_EXPRESSION -D_HAS_AUTO_PTR_ETC=0 -D_REENTRANT -include lcStanCompat.h -@ISYSTEM@"$(BH)" -@ISYSTEM@"$(EG)" $(SH) -@ISYSTEM@"$(RCPP)" -DEIGEN_DONT_PARALLELIZE
