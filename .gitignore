@@ -9,5 +9,4 @@ src/*.dll
 workaround.Rout
 config.log
 config.status
-compile_commands.json
 .cache/

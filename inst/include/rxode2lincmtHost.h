@@ -108,18 +108,6 @@
 #define RXLC_STRUCT_op rx_solving_options
 #define RXLC_STRUCT_ind rx_solving_options_ind
 
-/* rxode2 side: fill an int array of length RXLC_HOST_NOFF */
-#define RXLC_FILL1_(s, f, t, d) _rxlcOut[_rxlcK++] = (int) offsetof(RXLC_STRUCT_##s, f);
-#define RXLC_HOST_OFFSETS_FILL(out)                                          \
-  do {                                                                       \
-    int *_rxlcOut = (out);                                                   \
-    int _rxlcK = 0;                                                          \
-    _rxlcOut[_rxlcK++] = (int) sizeof(rx_solving_options_ind);               \
-    _rxlcOut[_rxlcK++] = RX_LINCMT_CARRY_MAXPAIRS;                           \
-    _rxlcOut[_rxlcK++] = RX_LINCMT_ORIGIN_MAX;                               \
-    RXLC_HOST_FIELDS(RXLC_FILL1_)                                            \
-  } while (0)
-
 /* rxode2 side, C++ only (needs <type_traits>): each listed field exists with
    exactly this type.  A mismatch fails rxode2's compile, never its load. */
 #define RXLC_CHECK1_(s, f, t, d)                                             \
