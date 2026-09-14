@@ -47,7 +47,8 @@ estimates.
 
 'rxode2lincmt' uses the 'StanHeaders' and 'RcppParallel' headers only
 (LinkingTo).  It neither links nor loads the TBB library, whose bundled copy
-in 'RcppParallel' is what the gcc-UBSAN check reports for 'rxode2' 5.1.7.
+in 'RcppParallel' is what the gcc-UBSAN check reports for 'rxode2' 5.1.7.  An
+R-hub clang-ubsan check of this package reports no runtime errors.
 
 The closed-form solutions follow the idea of the 'wnl' package by Kyun-Seop
 Bae; the implementation here is different.
@@ -55,6 +56,9 @@ Bae; the implementation here is different.
 ## Test environments
 
 * local Ubuntu 24.04, R 4.6.1, gcc 14
+* R-hub clang-ubsan (R-devel 2026-09-13 r90534, clang 22): Status OK with no
+  UBSAN runtime errors
+  (<https://github.com/nlmixr2/rxode2lincmt/actions/runs/34884238235>)
 
 ## R CMD check results
 
