@@ -347,6 +347,9 @@ typedef struct linB_s {
   // fix (see project_lincmt_timevarying_covariate_bug); an ordinary,
   // constant-theta solve never requests it and pays nothing extra.
   Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> JAlast;
+  // The individual (linCmtBind) whose row fx/J/Jg above belong to; the
+  // value memo lives with the individual, so it may only hit here.
+  const void *memoOwner = NULL;
 } linB_t;
 
 // linCmtB()'s per-INDIVIDUAL carried state, owned by rx_solving_options_ind.
@@ -3179,6 +3182,7 @@ static LINCMT_NOINLINE double linCmtBbody(linB_t &lcb, linCmtBind &wsp, rx_solve
     wsp.memoArgs[3] = p3; wsp.memoArgs[4] = p4; wsp.memoArgs[5] = p5;
     wsp.memoArgs[6] = ka;
     wsp.memoVal = val;
+    lcb.memoOwner = &wsp;
     return val;
   }
   if (id == 0 && IND(ind, linH)[0] == 0) {
@@ -3246,6 +3250,9 @@ static LINCMT_NOINLINE double linCmtBbody(linB_t &lcb, linCmtBind &wsp, rx_solve
   wsp.memoArgs[3] = p3; wsp.memoArgs[4] = p4; wsp.memoArgs[5] = p5;
   wsp.memoArgs[6] = ka;
   wsp.memoVal = val;
+  // fx/J/Jg are fresh for this row; no lazy restore may overwrite them
+  wsp.liteIdx = -1;
+  lcb.memoOwner = &wsp;
   return val;
 }
 
@@ -3285,9 +3292,11 @@ extern "C" double linCmtB(rx_solve *rx, int id,
     // with an identical key returns the cached result with J/Jg/fx left
     // standing for the reads.  The key covers every input the value
     // depends on; sentinels and reshapes invalidate (see linCmtBquery /
-    // linCmtBsetModel).  Doubles compare bitwise: nlmixr2est leaves
-    // ind->linCmtH NaN, which never equals itself.
-    if (wsp.memoIdx == idx && linCmtSameBits(wsp.memoT, _t) &&
+    // linCmtBsetModel).  Doubles compare bitwise: rxode2 leaves
+    // ind->linCmtH NaN on AD solves, which never equals itself.  The row's
+    // fx/J/Jg live with the thread slot, so the hit also needs this slot to
+    // hold this individual's row.
+    if (lcb.memoOwner == &wsp && wsp.memoIdx == idx && linCmtSameBits(wsp.memoT, _t) &&
         wsp.memoFlag == IND(ind, _rxFlag) && wsp.memoDoSS == (int)IND(ind, doSS) &&
         wsp.memoHpar == IND(ind, linCmtHparIndex) &&
         linCmtSameBits(wsp.memoH, IND(ind, linCmtH)) &&
