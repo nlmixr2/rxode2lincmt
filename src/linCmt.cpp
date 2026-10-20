@@ -3158,13 +3158,33 @@ extern "C" double linCmtB(rx_solve *rx, int id,
   // sensTheta, the SS setup, the rate cache, the m x npars Jacobian
   // restore and getJacCp.  J/Jg are left stale for the row and restored
   // lazily if a call-form query (carry sentinel/read) follows.
-  // FD-perturbed evaluations keep the full path.
+  // FD-perturbed evaluations keep the full path.  Inside the solve
+  // (linCmtAlast set: the calc_lhs pass after each interval) the row also
+  // leaves the kernel state the restore path would -- theta, the rate cache
+  // and pointers -- for any sentinel that follows; the per-origin cache
+  // there needs the full path.
+  const bool inSolve = IND(ind, linCmtAlast) != NULL;
   if (which1 == -1 && which2 == -1 &&
-      IND(ind, linCmtAlast) == NULL && IND(ind, linCmtHparIndex) < -1 &&
+      (!inSolve || OPT(op, linCmtOriginMask) == 0) &&
+      IND(ind, linCmtHparIndex) < -1 &&
       ((!IND(ind, doSS) && IND(ind, solvedIdx) >= idx) || IND(ind, _rxFlag) == 11)) {
     Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
       thetaL(getLinCmtDoubleAddr(lcb, linCmtBaddrTheta), lcb.lc.getNpars());
     linCmtFillTheta(thetaL, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
+    if (inSolve) {
+      if (id == 0 && IND(ind, linH)[0] == 0) {
+        lcb.lc.resetFlags();
+      }
+      lcb.lc.setId(id);
+      Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
+        thetaSensL(getLinCmtDoubleAddr(lcb, linCmtBaddrThetaSens), lcb.numSens);
+      lcb.lc.sensTheta(thetaL, thetaSensL, linCmtSensIsAD(RXS(rx, sensType)),
+                       RXS(rx, linCmtScale));
+      linCmtBsetupSs(lcb.lc, ind);
+      double *rL = getLinRate;
+      linCmtBcacheRate(ind, op, idx, rL);
+      lcb.lc.setPtr(IND(ind, linCmtAlast), rL, IND(ind, linCmtSave));
+    }
     lcb.lc.restoreFxTo(getAdvan(idx), lcb.fx);
     double val = lcb.lc.adjustF(lcb.fx, thetaL, IND(ind, linCmtHV));
 #pragma omp atomic

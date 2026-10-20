@@ -473,6 +473,18 @@ namespace stan {
             Rcpp::stop("Unknown linear compartment model: %d %d", ncmt_, oral0_);
           }
         }
+        if (isAD) {
+          // AD: an unscaled copy of the requested parameters, in the
+          // sensThetaElt() order; this runs on every linCmtB() row.
+          static const int bits[6] = {diffP1, diffV1, diffP2, diffP3, diffP4, diffP5};
+          const int np = 2*ncmt_;
+          int k = 0;
+          for (int p = 0; p < np; p++) {
+            if ((nd & bits[p]) != 0) sensTheta(k++, 0) = theta(p, 0);
+          }
+          if (oral0_ && (nd & diffKa) != 0) sensTheta(k, 0) = theta(np, 0);
+          return;
+        }
         int i = 0, j=0;
 
         if (!isAD && !scaleSetup_) {
