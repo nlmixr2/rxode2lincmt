@@ -2,6 +2,8 @@
 
 ## rxode2lincmt 0.1.0
 
+CRAN release: 2026-09-24
+
 ### New features
 
 - Initial release. The analytic one, two and three compartment linear

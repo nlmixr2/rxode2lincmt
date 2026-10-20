@@ -33,7 +33,7 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.1.0" id="rxode2lincmt-010">rxode2lincmt 0.1.0<a class="anchor" aria-label="anchor" href="#rxode2lincmt-010"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.1.0" id="rxode2lincmt-010">rxode2lincmt 0.1.0<a class="anchor" aria-label="anchor" href="#rxode2lincmt-010"></a></h2><p class="text-muted">CRAN release: 2026-09-24</p>
 <div class="section level3">
 <h3 id="new-features-0-1-0">New features<a class="anchor" aria-label="anchor" href="#new-features-0-1-0"></a></h3>
 <ul><li><p>Initial release. The analytic one, two and three compartment linear solutions, their ‘stan’ gradients, the eigen decompositions (<code><a href="../reference/solComp2.html">solComp2()</a></code>, <code><a href="../reference/solComp3.html">solComp3()</a></code>) and the derived-parameter conversions behind <code>rxode2::rxDerived()</code> moved here from ‘rxode2’, so ‘rxode2’ no longer compiles ‘stan’. ‘rxode2’ reaches the compiled kernels through an external-pointer table and hands this package the struct offsets it needs, so neither package shares struct layouts with the other.</p></li>
