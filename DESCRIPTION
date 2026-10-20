@@ -1,5 +1,5 @@
 Package: rxode2lincmt
-Version: 0.1.0
+Version: 0.1.1
 Title: Linear Compartment Model Solutions and Gradients for 'rxode2'
 Authors@R: c(
    person("Matthew L.", "Fidler", role = c("aut", "cre"),

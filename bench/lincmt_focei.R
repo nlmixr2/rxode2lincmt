@@ -1,10 +1,10 @@
-# lincmt_1cmt_focei.R -- FOCEi cost of a one-compartment linCmt() model
-# against the same model written as an ODE (rxode2lincmt#2).
+# lincmt_focei.R -- FOCEi cost of a linCmt() model against the same model
+# written as ODEs (rxode2lincmt#2).
 #
-#   R_LIBS=~/R/lib-lincmt-dev ROUTE=bolus REPS=3 \
-#     taskset -c <idle core> Rscript bench/lincmt_1cmt_focei.R
+#   R_LIBS=~/R/lib-lincmt-dev ROUTE=bolus NCMT=1 REPS=3 \
+#     taskset -c <idle core> Rscript bench/lincmt_focei.R
 #
-# ROUTE is bolus, infusion or oral.  Each arm is fitted with a fixed number
+# ROUTE is bolus, infusion or oral; NCMT is 1 or 2.  Each arm is fitted with a fixed number
 # of outer iterations (ITER, default 20), so the time is the per-evaluation
 # cost and not the optimizer's path; "posthoc" is the inner problems alone.
 suppressMessages({
@@ -14,6 +14,7 @@ suppressMessages({
 setRxThreads(1L)
 
 route <- Sys.getenv("ROUTE", "bolus")
+nCmt <- as.integer(Sys.getenv("NCMT", "1"))
 nRep <- as.integer(Sys.getenv("REPS", "3"))
 nIter <- as.integer(Sys.getenv("ITER", "20"))
 nSub <- as.integer(Sys.getenv("NSUB", "100"))
@@ -26,15 +27,17 @@ set.seed(42)
 oral <- route == "oral"
 trueTheta <- if (oral) c(ka = 1.2, cl = 4, v = 30) else c(cl = 4, v = 30)
 etaNm <- names(trueTheta)
+if (nCmt == 2) trueTheta <- c(trueTheta, q = 8, vp = 60)
 eta <- matrix(rnorm(nSub * length(etaNm), 0, 0.3), nSub, dimnames = list(NULL, etaNm))
-pars <- as.data.frame(sweep(exp(eta), 2, trueTheta, "*"))
+pars <- as.data.frame(sweep(exp(eta), 2, trueTheta[etaNm], "*"))
+for (p in setdiff(names(trueTheta), etaNm)) pars[[p]] <- trueTheta[[p]]
 
 doseCmt <- if (oral) "depot" else "central"
-odeLines <- if (oral) {
-  "d/dt(depot) = -ka*depot\nd/dt(central) = ka*depot - cl/v*central"
-} else {
-  "d/dt(central) = -cl/v*central"
-}
+odeLines <- paste0(
+  if (oral) "d/dt(depot) = -ka*depot\nd/dt(central) = ka*depot" else "d/dt(central) =",
+  " - cl/v*central",
+  if (nCmt == 2) " - q/v*central + q/vp*periph\nd/dt(periph) = q/v*central - q/vp*periph" else ""
+)
 simMod <- rxode2(paste0(odeLines, "\ncp = central/v"))
 ev <- et(amt = 100, cmt = doseCmt, time = doseTimes,
          dur = if (route == "infusion") 1 else 0) |> et(obsTimes)
@@ -50,10 +53,12 @@ dose <- data.frame(ID = dose$ID, TIME = dose$TIME, DV = NA_real_, AMT = 100,
 dat <- rbind(dose, obs)
 dat <- dat[order(dat$ID, dat$TIME, -dat$EVID), ]
 
-iniTxt <- paste(c(sprintf("l%s <- log(%.6g)", etaNm, trueTheta * 1.2),
+iniTxt <- paste(c(sprintf("l%s <- log(%.6g)", names(trueTheta), trueTheta * 1.2),
                   sprintf("eta.%s ~ 0.1", etaNm), "prop.sd <- 0.2"),
                 collapse = "\n")
-parTxt <- paste(sprintf("%s <- exp(l%s + eta.%s)", etaNm, etaNm, etaNm),
+parTxt <- paste(c(sprintf("%s <- exp(l%s + eta.%s)", etaNm, etaNm, etaNm),
+                  sprintf("%s <- exp(l%s)", setdiff(names(trueTheta), etaNm),
+                          setdiff(names(trueTheta), etaNm))),
                 collapse = "\n")
 mkUi <- function(body) {
   eval(parse(text = sprintf(
@@ -84,7 +89,7 @@ for (arm in arms) {
   for (what in whats) {
     it <- if (what == "posthoc") 0L else nIter
     z <- vapply(seq_len(nRep), function(i) fitSec(ui, it), numeric(2))
-    res <- rbind(res, data.frame(route = route, arm = arm, what = what,
+    res <- rbind(res, data.frame(route = route, ncmt = nCmt, arm = arm, what = what,
                                  sec = min(z["sec", ]),
                                  objf = z["objf", 1]))
   }
