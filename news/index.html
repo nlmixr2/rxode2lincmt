@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">rxode2lincmt</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,6 +32,18 @@
       <small>Source: <a href="https://github.com/nlmixr2/rxode2lincmt/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.1" id="rxode2lincmt-011">rxode2lincmt 0.1.1<a class="anchor" aria-label="anchor" href="#rxode2lincmt-011"></a></h2>
+<div class="section level3">
+<h3 id="new-features-0-1-1">New features<a class="anchor" aria-label="anchor" href="#new-features-0-1-1"></a></h3>
+<ul><li>
+<code>linCmt()</code> FOCEi fits spend less time per row: the output pass that runs after each solved interval now takes the thin value path instead of restoring the full Jacobian, the AD path copies the requested parameters instead of running the scaling setup, and the value-memo check runs before the rest of the per-row work. Results are bitwise unchanged (<a href="https://github.com/nlmixr2/rxode2lincmt/issues/2" class="external-link">#2</a>).</li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-0-1-1">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-0-1-1"></a></h3>
+<ul><li>The last-row value memo of <code>linCmt()</code> never hit inside an ‘nlmixr2est’ fit, because ‘nlmixr2est’ leaves the finite-difference step NaN and NaN never equals itself; every repeated call the model makes for a row recomputed it. The memo keys now compare bitwise (<a href="https://github.com/nlmixr2/rxode2lincmt/issues/2" class="external-link">#2</a>).</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.0" id="rxode2lincmt-010">rxode2lincmt 0.1.0<a class="anchor" aria-label="anchor" href="#rxode2lincmt-010"></a></h2><p class="text-muted">CRAN release: 2026-09-24</p>
 <div class="section level3">
