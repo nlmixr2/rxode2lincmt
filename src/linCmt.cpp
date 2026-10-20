@@ -5,6 +5,7 @@
 #define STRICT_R_HEADERS
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
 #include <algorithm>
 #include "lcOmp.h"
 #include "lcHost.h"
@@ -385,8 +386,17 @@ typedef struct linCmtBind_s {
 // so this needs no locking.
 // Bitwise equality for cache keys (NaN matches NaN).
 static inline bool linCmtSameBits(double a, double b) {
-  return memcmp(&a, &b, sizeof(double)) == 0;
+  uint64_t x, y;
+  memcpy(&x, &a, sizeof(double));
+  memcpy(&y, &b, sizeof(double));
+  return x == y;
 }
+
+#if defined(__GNUC__)
+#define LINCMT_NOINLINE __attribute__((noinline))
+#else
+#define LINCMT_NOINLINE
+#endif
 
 static inline linCmtBind &linCmtBindGet(rx_solving_options_ind *ind) {
   if (IND(ind, linCmtBind) == NULL) {
@@ -3089,35 +3099,16 @@ static inline void linCmtBsolveRow(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
   lcb.lc.fHCalcJac(thetaSens, IND(ind, linH), lcb.fx, lcb.Js);
 }
 
-extern "C" double linCmtB(rx_solve *rx, int id,
-                          double _t, int linCmt,
-                          int ncmt, int oral0,
-                          int which1, int which2,
-                          int trans,
-                          double p1, double v1,
-                          double p2, double p3,
-                          double p4, double p5,
-                          // Oral parameters
-                          double ka) {
-  // Per-thread linCmtB state (matching linCmtA pattern for thread safety)
-  int _tid = rx_get_thread(__linCmtB.size());
-  linB_t &lcb = __linCmtB[_tid];
-  // Diagnostic only (linCmtBThreads()).  The plain read in front of the
-  // atomic matters: this is on the entry of a function a FOCEi fit calls
-  // upwards of a million times per objective evaluation, and the only
-  // transition is 0 -> 1, so a racy read costs at worst one redundant
-  // store and never a wrong answer.
-  if (_tid < RX_LINCMTB_THREAD_SEEN && !linCmtBThreadSeen[_tid]) {
-#pragma omp atomic write
-    linCmtBThreadSeen[_tid] = 1;
-  }
-  rx_solving_options_ind *ind = RX_IND(rx, id);
-  // The individual's own carried state: window + value memo.  Because it
-  // belongs to the individual, none of the keys below need the subject id
-  // any more -- this block IS the subject.
-  linCmtBind &wsp = linCmtBindGet(ind);
+// linCmtB() past the value memo: sentinels and reads, a reshape, the thin
+// value path and the row solve.  Kept out of line so the memo hit -- most of
+// the calls a fit makes -- does not pay this frame.
+static LINCMT_NOINLINE double linCmtBbody(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
+                                          rx_solving_options_ind *ind, int id, int idx,
+                                          double _t, int ncmt, int oral0,
+                                          int which1, int which2, int trans,
+                                          double p1, double v1, double p2, double p3,
+                                          double p4, double p5, double ka) {
   rx_solving_options *op = RXS(rx, op);
-  int idx = IND(ind, idx);
   if (which1 != -1 || which2 != -1) {
     if (wsp.liteIdx == idx) {
       // The thin value path left J/Jg stale for this row; a call-form
@@ -3139,24 +3130,7 @@ extern "C" double linCmtB(rx_solve *rx, int id,
   } else if (!lcb.lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
     linCmtBsetModel(lcb, wsp, ncmt, oral0, trans, IND(ind, linSS), rx);
   } else {
-    // Last-row value memo: the generated model executes this value call
-    // many times per row (compute phase and restore path alike); a repeat
-    // with an identical key returns the cached result with J/Jg/fx left
-    // standing for the reads.  The key covers every input the value
-    // depends on; sentinels and reshapes invalidate (see linCmtBquery /
-    // linCmtBsetModel).  Doubles compare bitwise: nlmixr2est leaves
-    // ind->linCmtH NaN, which never equals itself.
-    const double args[7] = {p1, v1, p2, p3, p4, p5, ka};
-    if (wsp.memoIdx == idx && linCmtSameBits(wsp.memoT, _t) &&
-        wsp.memoFlag == IND(ind, _rxFlag) && wsp.memoDoSS == (int)IND(ind, doSS) &&
-        wsp.memoHpar == IND(ind, linCmtHparIndex) &&
-        linCmtSameBits(wsp.memoH, IND(ind, linCmtH)) &&
-        linCmtSameBits(wsp.memoHV, IND(ind, linCmtHV)) &&
-        memcmp(wsp.memoArgs, args, sizeof(args)) == 0) {
-#pragma omp atomic
-      linCmtMemoHitN++;
-      return wsp.memoVal;
-    }
+    // linCmtB() already missed the value memo
     lcb.lc.setSsType(IND(ind, linSS));
   }
   // Thin value path (the dydt/calc_lhs consolidation, linCmtB only): an
@@ -3273,4 +3247,60 @@ extern "C" double linCmtB(rx_solve *rx, int id,
   wsp.memoArgs[6] = ka;
   wsp.memoVal = val;
   return val;
+}
+
+extern "C" double linCmtB(rx_solve *rx, int id,
+                          double _t, int linCmt,
+                          int ncmt, int oral0,
+                          int which1, int which2,
+                          int trans,
+                          double p1, double v1,
+                          double p2, double p3,
+                          double p4, double p5,
+                          // Oral parameters
+                          double ka) {
+  (void)linCmt;
+  // Per-thread linCmtB state (matching linCmtA pattern for thread safety)
+  int _tid = rx_get_thread(__linCmtB.size());
+  linB_t &lcb = __linCmtB[_tid];
+  // Diagnostic only (linCmtBThreads()).  The plain read in front of the
+  // atomic matters: this is on the entry of a function a FOCEi fit calls
+  // upwards of a million times per objective evaluation, and the only
+  // transition is 0 -> 1, so a racy read costs at worst one redundant
+  // store and never a wrong answer.
+  if (_tid < RX_LINCMTB_THREAD_SEEN && !linCmtBThreadSeen[_tid]) {
+#pragma omp atomic write
+    linCmtBThreadSeen[_tid] = 1;
+  }
+  rx_solving_options_ind *ind = RX_IND(rx, id);
+  // The individual's own carried state: window + value memo.  Because it
+  // belongs to the individual, none of the keys below need the subject id
+  // any more -- this block IS the subject.
+  linCmtBind &wsp = linCmtBindGet(ind);
+  int idx = IND(ind, idx);
+  if (which1 == -1 && which2 == -1 &&
+      lcb.lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
+    // Last-row value memo: the generated model executes this value call
+    // many times per row (compute phase and restore path alike); a repeat
+    // with an identical key returns the cached result with J/Jg/fx left
+    // standing for the reads.  The key covers every input the value
+    // depends on; sentinels and reshapes invalidate (see linCmtBquery /
+    // linCmtBsetModel).  Doubles compare bitwise: nlmixr2est leaves
+    // ind->linCmtH NaN, which never equals itself.
+    if (wsp.memoIdx == idx && linCmtSameBits(wsp.memoT, _t) &&
+        wsp.memoFlag == IND(ind, _rxFlag) && wsp.memoDoSS == (int)IND(ind, doSS) &&
+        wsp.memoHpar == IND(ind, linCmtHparIndex) &&
+        linCmtSameBits(wsp.memoH, IND(ind, linCmtH)) &&
+        linCmtSameBits(wsp.memoHV, IND(ind, linCmtHV)) &&
+        linCmtSameBits(wsp.memoArgs[0], p1) && linCmtSameBits(wsp.memoArgs[1], v1) &&
+        linCmtSameBits(wsp.memoArgs[2], p2) && linCmtSameBits(wsp.memoArgs[3], p3) &&
+        linCmtSameBits(wsp.memoArgs[4], p4) && linCmtSameBits(wsp.memoArgs[5], p5) &&
+        linCmtSameBits(wsp.memoArgs[6], ka)) {
+#pragma omp atomic
+      linCmtMemoHitN++;
+      return wsp.memoVal;
+    }
+  }
+  return linCmtBbody(lcb, wsp, rx, ind, id, idx, _t, ncmt, oral0, which1, which2,
+                     trans, p1, v1, p2, p3, p4, p5, ka);
 }
