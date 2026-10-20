@@ -27,51 +27,105 @@ set.seed(42)
 oral <- route == "oral"
 trueTheta <- if (oral) c(ka = 1.2, cl = 4, v = 30) else c(cl = 4, v = 30)
 etaNm <- names(trueTheta)
-if (nCmt == 2) trueTheta <- c(trueTheta, q = 8, vp = 60)
-eta <- matrix(rnorm(nSub * length(etaNm), 0, 0.3), nSub, dimnames = list(NULL, etaNm))
+if (nCmt == 2) {
+  trueTheta <- c(trueTheta, q = 8, vp = 60)
+}
+eta <- matrix(
+  rnorm(nSub * length(etaNm), 0, 0.3),
+  nSub,
+  dimnames = list(NULL, etaNm)
+)
 pars <- as.data.frame(sweep(exp(eta), 2, trueTheta[etaNm], "*"))
-for (p in setdiff(names(trueTheta), etaNm)) pars[[p]] <- trueTheta[[p]]
+for (p in setdiff(names(trueTheta), etaNm)) {
+  pars[[p]] <- trueTheta[[p]]
+}
 
 doseCmt <- if (oral) "depot" else "central"
 odeLines <- paste0(
-  if (oral) "d/dt(depot) = -ka*depot\nd/dt(central) = ka*depot" else "d/dt(central) =",
+  if (oral) {
+    "d/dt(depot) = -ka*depot\nd/dt(central) = ka*depot"
+  } else {
+    "d/dt(central) ="
+  },
   " - cl/v*central",
-  if (nCmt == 2) " - q/v*central + q/vp*periph\nd/dt(periph) = q/v*central - q/vp*periph" else ""
+  if (nCmt == 2) {
+    " - q/v*central + q/vp*periph\nd/dt(periph) = q/v*central - q/vp*periph"
+  } else {
+    ""
+  }
 )
 simMod <- rxode2(paste0(odeLines, "\ncp = central/v"))
-ev <- et(amt = 100, cmt = doseCmt, time = doseTimes,
-         dur = if (route == "infusion") 1 else 0) |> et(obsTimes)
+ev <- et(
+  amt = 100,
+  cmt = doseCmt,
+  time = doseTimes,
+  dur = if (route == "infusion") 1 else 0
+) |>
+  et(obsTimes)
 sim <- rxSolve(simMod, pars, ev, cores = 1L, addDosing = FALSE)
 set.seed(43)
-obs <- data.frame(ID = sim$sim.id, TIME = sim$time,
-                  DV = sim$cp * (1 + rnorm(nrow(sim), 0, 0.15)),
-                  AMT = 0, RATE = 0, EVID = 0, CMT = "central")
+obs <- data.frame(
+  ID = sim$sim.id,
+  TIME = sim$time,
+  DV = sim$cp * (1 + rnorm(nrow(sim), 0, 0.15)),
+  AMT = 0,
+  RATE = 0,
+  EVID = 0,
+  CMT = "central"
+)
 dose <- expand.grid(TIME = doseTimes, ID = seq_len(nSub))
-dose <- data.frame(ID = dose$ID, TIME = dose$TIME, DV = NA_real_, AMT = 100,
-                   RATE = if (route == "infusion") 100 else 0, EVID = 1,
-                   CMT = doseCmt)
+dose <- data.frame(
+  ID = dose$ID,
+  TIME = dose$TIME,
+  DV = NA_real_,
+  AMT = 100,
+  RATE = if (route == "infusion") 100 else 0,
+  EVID = 1,
+  CMT = doseCmt
+)
 dat <- rbind(dose, obs)
 dat <- dat[order(dat$ID, dat$TIME, -dat$EVID), ]
 
-iniTxt <- paste(c(sprintf("l%s <- log(%.6g)", names(trueTheta), trueTheta * 1.2),
-                  sprintf("eta.%s ~ 0.1", etaNm), "prop.sd <- 0.2"),
-                collapse = "\n")
-parTxt <- paste(c(sprintf("%s <- exp(l%s + eta.%s)", etaNm, etaNm, etaNm),
-                  sprintf("%s <- exp(l%s)", setdiff(names(trueTheta), etaNm),
-                          setdiff(names(trueTheta), etaNm))),
-                collapse = "\n")
+iniTxt <- paste(
+  c(
+    sprintf("l%s <- log(%.6g)", names(trueTheta), trueTheta * 1.2),
+    sprintf("eta.%s ~ 0.1", etaNm),
+    "prop.sd <- 0.2"
+  ),
+  collapse = "\n"
+)
+parTxt <- paste(
+  c(
+    sprintf("%s <- exp(l%s + eta.%s)", etaNm, etaNm, etaNm),
+    sprintf(
+      "%s <- exp(l%s)",
+      setdiff(names(trueTheta), etaNm),
+      setdiff(names(trueTheta), etaNm)
+    )
+  ),
+  collapse = "\n"
+)
 mkUi <- function(body) {
-  eval(parse(text = sprintf(
-    "function() {\nini({\n%s\n})\nmodel({\n%s\n%s\ncp ~ prop(prop.sd)\n})\n}",
-    iniTxt, parTxt, body)))
+  eval(parse(
+    text = sprintf(
+      "function() {\nini({\n%s\n})\nmodel({\n%s\n%s\ncp ~ prop(prop.sd)\n})\n}",
+      iniTxt,
+      parTxt,
+      body
+    )
+  ))
 }
 uiLin <- mkUi("cp <- linCmt()")
 uiOde <- mkUi(paste0(odeLines, "\ncp <- central/v"))
 
 ctl <- function(it) {
-  foceiControl(calcTables = FALSE, print = 0L, covMethod = "",
-               maxOuterIterations = it,
-               rxControl = rxControl(cores = 1L))
+  foceiControl(
+    calcTables = FALSE,
+    print = 0L,
+    covMethod = "",
+    maxOuterIterations = it,
+    rxControl = rxControl(cores = 1L)
+  )
 }
 fitSec <- function(ui, it) {
   t0 <- proc.time()[["elapsed"]]
@@ -89,15 +143,29 @@ for (arm in arms) {
   for (what in whats) {
     it <- if (what == "posthoc") 0L else nIter
     z <- vapply(seq_len(nRep), function(i) fitSec(ui, it), numeric(2))
-    res <- rbind(res, data.frame(route = route, ncmt = nCmt, arm = arm, what = what,
-                                 sec = min(z["sec", ]),
-                                 objf = z["objf", 1]))
+    res <- rbind(
+      res,
+      data.frame(
+        route = route,
+        ncmt = nCmt,
+        arm = arm,
+        what = what,
+        sec = min(z["sec", ]),
+        objf = z["objf", 1]
+      )
+    )
   }
 }
-if (!is.null(res)) print(res)
+if (!is.null(res)) {
+  print(res)
+}
 if (all(c("linCmt", "ode") %in% arms)) {
-  w <- reshape(res[, c("arm", "what", "sec")], idvar = "what",
-               timevar = "arm", direction = "wide")
+  w <- reshape(
+    res[, c("arm", "what", "sec")],
+    idvar = "what",
+    timevar = "arm",
+    direction = "wide"
+  )
   w$ratio <- w$sec.linCmt / w$sec.ode
   print(w)
 }
