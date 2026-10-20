@@ -5,6 +5,7 @@
 #define STRICT_R_HEADERS
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
 #include <algorithm>
 #include "lcOmp.h"
 #include "lcHost.h"
@@ -346,6 +347,9 @@ typedef struct linB_s {
   // fix (see project_lincmt_timevarying_covariate_bug); an ordinary,
   // constant-theta solve never requests it and pays nothing extra.
   Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> JAlast;
+  // The individual (linCmtBind) whose row fx/J/Jg above belong to; the
+  // value memo lives with the individual, so it may only hit here.
+  const void *memoOwner = NULL;
 } linB_t;
 
 // linCmtB()'s per-INDIVIDUAL carried state, owned by rx_solving_options_ind.
@@ -383,6 +387,20 @@ typedef struct linCmtBind_s {
 // Allocated on first touch inside the solve; released with the subject in
 // rxFreeInd().  One individual is only ever solved by one thread at a time,
 // so this needs no locking.
+// Bitwise equality for cache keys (NaN matches NaN).
+static inline bool linCmtSameBits(double a, double b) {
+  uint64_t x, y;
+  memcpy(&x, &a, sizeof(double));
+  memcpy(&y, &b, sizeof(double));
+  return x == y;
+}
+
+#if defined(__GNUC__)
+#define LINCMT_NOINLINE __attribute__((noinline))
+#else
+#define LINCMT_NOINLINE
+#endif
+
 static inline linCmtBind &linCmtBindGet(rx_solving_options_ind *ind) {
   if (IND(ind, linCmtBind) == NULL) {
     IND(ind, linCmtBind) = (void*) new linCmtBind();
@@ -429,6 +447,7 @@ static inline void linCmtBsetModel(linB_t &lcb, linCmtBind &wsp,
                                    int linSS, rx_solve *rx) {
   wsp.memoIdx = -1; // reshape invalidates the last-row value memo
   wsp.liteIdx = -1;
+  lcb.memoOwner = NULL; // and the slot's fx/J/Jg belong to no row yet
   lcb.lc.setModelType(ncmt, oral0, trans, linSS, RXS(rx, ndiff));
   int npars = lcb.lc.getNpars();
   lcb.fx = Eigen::Matrix<double, Eigen::Dynamic, 1>(ncmt + oral0);
@@ -3084,6 +3103,201 @@ static inline void linCmtBsolveRow(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
   lcb.lc.fHCalcJac(thetaSens, IND(ind, linH), lcb.fx, lcb.Js);
 }
 
+// Store the row in the individual's value memo; this thread slot now holds
+// the individual's row.
+static inline void linCmtBmemoStore(linB_t &lcb, linCmtBind &wsp,
+                                    rx_solving_options_ind *ind, int idx, double _t,
+                                    double p1, double v1, double p2, double p3,
+                                    double p4, double p5, double ka, double val) {
+  wsp.memoIdx = idx; wsp.memoT = _t;
+  wsp.memoFlag = IND(ind, _rxFlag); wsp.memoDoSS = (int)IND(ind, doSS);
+  wsp.memoHpar = IND(ind, linCmtHparIndex);
+  wsp.memoH = IND(ind, linCmtH); wsp.memoHV = IND(ind, linCmtHV);
+  wsp.memoArgs[0] = p1; wsp.memoArgs[1] = v1; wsp.memoArgs[2] = p2;
+  wsp.memoArgs[3] = p3; wsp.memoArgs[4] = p4; wsp.memoArgs[5] = p5;
+  wsp.memoArgs[6] = ka;
+  wsp.memoVal = val;
+  lcb.memoOwner = &wsp;
+}
+
+// The thin value path left J/Jg stale for this row; a call-form query
+// consumes them -- restore once, lazily.
+static inline void linCmtBliteRestore(linB_t &lcb, linCmtBind &wsp,
+                                      rx_solving_options_ind *ind,
+                                      rx_solving_options *op, int idx,
+                                      int ncmt, int oral0,
+                                      double p1, double v1, double p2, double p3,
+                                      double p4, double p5, double ka) {
+  Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
+    theta(getLinCmtDoubleAddr(lcb, linCmtBaddrTheta), lcb.lc.getNpars());
+  linCmtFillTheta(theta, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
+  double *acur = getAdvan(idx);
+  lcb.lc.restoreJacTo(acur, lcb.J);
+  lcb.lc.restoreFxTo(acur, lcb.fx);
+  lcb.lc.getJacCp(lcb.J, lcb.fx, theta, lcb.Jg);
+  wsp.liteIdx = -1;
+}
+
+// Kernel state for a row from prior amounts a: theta scaling, steady-state
+// setup, the rate (cached for which1 = -3) and the pointers.  Returns the
+// rate.
+static inline double *linCmtBrowState(linB_t &lcb, rx_solve *rx,
+                                      rx_solving_options_ind *ind,
+                                      rx_solving_options *op, int id, int idx,
+                                      Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> > &theta,
+                                      Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> > &thetaSens,
+                                      double *a) {
+  if (id == 0 && IND(ind, linH)[0] == 0) {
+    lcb.lc.resetFlags();
+  }
+  lcb.lc.setId(id);
+  // isAD (unscaled thetaSens + passthrough trueTheta) is used by every AD
+  // jacobian path: forward-mode (3/30/auto), reverse-mode (31). The finite
+  // difference methods keep the scaled path.
+  lcb.lc.sensTheta(theta, thetaSens, linCmtSensIsAD(RXS(rx, sensType)), RXS(rx, linCmtScale));
+  linCmtBsetupSs(lcb.lc, ind);
+  double *r = getLinRate;
+  linCmtBcacheRate(ind, op, idx, r);
+  lcb.lc.setPtr(a, r, IND(ind, linCmtSave));
+  return r;
+}
+
+// Thin value path (the dydt/calc_lhs consolidation, linCmtB only): an
+// already-solved row's value re-execution (the calc_lhs walk and the
+// output pass) needs only fx and the concentration scaling -- skip
+// sensTheta, the SS setup, the rate cache, the m x npars Jacobian
+// restore and getJacCp.  J/Jg are left stale for the row and restored
+// lazily if a call-form query (carry sentinel/read) follows.
+// FD-perturbed evaluations keep the full path.  Inside the solve
+// (linCmtAlast set: the calc_lhs pass after each interval) the row also
+// leaves the kernel state the restore path would -- theta, the rate cache
+// and pointers -- for any sentinel that follows; the per-origin cache
+// there needs the full path.
+static inline bool linCmtBliteOk(rx_solving_options_ind *ind,
+                                 rx_solving_options *op, int idx) {
+  return (IND(ind, linCmtAlast) == NULL || OPT(op, linCmtOriginMask) == 0) &&
+    IND(ind, linCmtHparIndex) < -1 &&
+    ((!IND(ind, doSS) && IND(ind, solvedIdx) >= idx) || IND(ind, _rxFlag) == 11);
+}
+
+static double linCmtBlite(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
+                          rx_solving_options_ind *ind, rx_solving_options *op,
+                          int id, int idx, double _t, int ncmt, int oral0,
+                          double p1, double v1, double p2, double p3,
+                          double p4, double p5, double ka) {
+  Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
+    thetaL(getLinCmtDoubleAddr(lcb, linCmtBaddrTheta), lcb.lc.getNpars());
+  linCmtFillTheta(thetaL, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
+  if (IND(ind, linCmtAlast) != NULL) {
+    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
+      thetaSensL(getLinCmtDoubleAddr(lcb, linCmtBaddrThetaSens), lcb.numSens);
+    linCmtBrowState(lcb, rx, ind, op, id, idx, thetaL, thetaSensL,
+                    IND(ind, linCmtAlast));
+  }
+  lcb.lc.restoreFxTo(getAdvan(idx), lcb.fx);
+  double val = lcb.lc.adjustF(lcb.fx, thetaL, IND(ind, linCmtHV));
+#pragma omp atomic
+  linCmtValLiteN++;
+  wsp.liteIdx = idx;
+  linCmtBmemoStore(lcb, wsp, ind, idx, _t, p1, v1, p2, p3, p4, p5, ka, val);
+  return val;
+}
+
+// Keep the per-origin decomposition (which1 = -9/-10) in step, but only on
+// a row that is GENUINELY being solved -- never on a restore/lhs re-query
+// (it would advance the state twice) and never on an H-perturbed
+// evaluation (its amounts belong to a perturbed parameter, not the solve).
+// Opt-in: a model that moves or scales no linCmt() dose pays nothing.
+static void linCmtBoriginRow(linB_t &lcb, rx_solving_options_ind *ind,
+                             rx_solving_options *op, int idx, double *a, double *r,
+                             Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> > &thetaSens,
+                             int ncmt, int oral0, int trans) {
+  if (IND(ind, doSS) || IND(ind, solvedIdx) < idx) {
+    // trueTheta(thetaSens) is what linCmtBsolveRow() just advanced the
+    // amounts with, H perturbation and ndiff masking included, so the rows
+    // stay in step with them on every pass -- an H-optimization probe solve
+    // included, which is a genuine solve of its own (iniSubject() runs
+    // before it) and must not be left without a decomposition.
+    // trueTheta() takes a Matrix, and thetaSens is a Map over lcb's buffer.
+    Eigen::Matrix<double, Eigen::Dynamic, 1> tsOrig = thetaSens;
+    linCmtOriginAdvance(lcb.lc, ind, op, a, lcb.fx, r,
+                        lcb.lc.trueTheta(tsOrig), ncmt, oral0, trans, idx);
+  } else {
+    // A restored row advances nothing, but the FIRST record of a subject
+    // only ever restores -- its amounts are still the initial conditions --
+    // and the output pass has no other way to learn that its decomposition
+    // is a real, empty one.  Cache it once; a later restore of an index the
+    // solve has already moved past must not overwrite what it recorded.
+    int mOrig = ncmt + oral0;
+    double *slot = (mOrig > 0 && mOrig <= RX_LINCMT_ORIGIN_MAX) ?
+      linCmtOriginSlot(ind, idx, RX_LINCMT_ORIGIN_SLOTW(mOrig), 1) : NULL;
+    if (slot != NULL && slot[mOrig*RX_LINCMT_ORIGIN_MAX] == 0.0) {
+      linCmtOriginCacheRow(ind, idx, mOrig, IND(ind, linCmtOrigin),
+                           IND(ind, linCmtOriginSeeded));
+    }
+  }
+}
+
+// The full row: kernel state, the solve (or restore) with its Jacobian, the
+// per-origin decomposition and the concentration gradient.
+static double linCmtBrow(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
+                         rx_solving_options_ind *ind, rx_solving_options *op,
+                         int id, int idx, double _t, int ncmt, int oral0, int trans,
+                         double p1, double v1, double p2, double p3,
+                         double p4, double p5, double ka) {
+  Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
+    theta(getLinCmtDoubleAddr(lcb, linCmtBaddrTheta), lcb.lc.getNpars());
+  linCmtFillTheta(theta, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
+  Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
+    thetaSens(getLinCmtDoubleAddr(lcb, linCmtBaddrThetaSens), lcb.numSens);
+  double *a = (IND(ind, linCmtAlast) == NULL) ? getAdvan(IND(ind, solvedIdx)) : IND(ind, linCmtAlast);
+  double *r = linCmtBrowState(lcb, rx, ind, op, id, idx, theta, thetaSens, a);
+
+  linCmtBsolveRow(lcb, wsp, rx, ind, op, id, idx, _t, a, r, ncmt, oral0, trans, theta, thetaSens);
+  if (OPT(op, linCmtOriginMask) != 0 && IND(ind, _rxFlag) != 11) {
+    linCmtBoriginRow(lcb, ind, op, idx, a, r, thetaSens, ncmt, oral0, trans);
+  }
+  lcb.lc.getJacCp(lcb.J, lcb.fx, theta, lcb.Jg);
+  double val = lcb.lc.adjustF(lcb.fx, theta, IND(ind, linCmtHV));
+  // fx/J/Jg are fresh for this row; no lazy restore may overwrite them
+  wsp.liteIdx = -1;
+  linCmtBmemoStore(lcb, wsp, ind, idx, _t, p1, v1, p2, p3, p4, p5, ka, val);
+  return val;
+}
+
+// linCmtB() past the value memo: sentinels and reads, a reshape, the thin
+// value path and the row solve.  Kept out of line so the memo hit -- most of
+// the calls a fit makes -- does not pay this frame.
+static LINCMT_NOINLINE double linCmtBbody(linB_t &lcb, linCmtBind &wsp, rx_solve *rx,
+                                          rx_solving_options_ind *ind, int id, int idx,
+                                          double _t, int ncmt, int oral0,
+                                          int which1, int which2, int trans,
+                                          double p1, double v1, double p2, double p3,
+                                          double p4, double p5, double ka) {
+  rx_solving_options *op = RXS(rx, op);
+  if (which1 != -1 || which2 != -1) {
+    if (wsp.liteIdx == idx) {
+      linCmtBliteRestore(lcb, wsp, ind, op, idx, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
+    }
+    double out;
+    if (linCmtBquery(lcb, wsp, rx, ind, op, idx, _t, ncmt, oral0, which1, which2, trans,
+                     p1, v1, p2, p3, p4, p5, ka, &out)) {
+      return out;
+    }
+  } else if (!lcb.lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
+    linCmtBsetModel(lcb, wsp, ncmt, oral0, trans, IND(ind, linSS), rx);
+  } else {
+    // linCmtB() already missed the value memo
+    lcb.lc.setSsType(IND(ind, linSS));
+  }
+  if (which1 == -1 && which2 == -1 && linCmtBliteOk(ind, op, idx)) {
+    return linCmtBlite(lcb, wsp, rx, ind, op, id, idx, _t, ncmt, oral0,
+                       p1, v1, p2, p3, p4, p5, ka);
+  }
+  return linCmtBrow(lcb, wsp, rx, ind, op, id, idx, _t, ncmt, oral0, trans,
+                    p1, v1, p2, p3, p4, p5, ka);
+}
+
 extern "C" double linCmtB(rx_solve *rx, int id,
                           double _t, int linCmt,
                           int ncmt, int oral0,
@@ -3094,6 +3308,7 @@ extern "C" double linCmtB(rx_solve *rx, int id,
                           double p4, double p5,
                           // Oral parameters
                           double ka) {
+  (void)linCmt;
   // Per-thread linCmtB state (matching linCmtA pattern for thread safety)
   int _tid = rx_get_thread(__linCmtB.size());
   linB_t &lcb = __linCmtB[_tid];
@@ -3111,139 +3326,32 @@ extern "C" double linCmtB(rx_solve *rx, int id,
   // belongs to the individual, none of the keys below need the subject id
   // any more -- this block IS the subject.
   linCmtBind &wsp = linCmtBindGet(ind);
-  rx_solving_options *op = RXS(rx, op);
   int idx = IND(ind, idx);
-  if (which1 != -1 || which2 != -1) {
-    if (wsp.liteIdx == idx) {
-      // The thin value path left J/Jg stale for this row; a call-form
-      // query consumes them -- restore once, lazily.
-      Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
-        theta(getLinCmtDoubleAddr(lcb, linCmtBaddrTheta), lcb.lc.getNpars());
-      linCmtFillTheta(theta, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
-      double *acur = getAdvan(idx);
-      lcb.lc.restoreJacTo(acur, lcb.J);
-      lcb.lc.restoreFxTo(acur, lcb.fx);
-      lcb.lc.getJacCp(lcb.J, lcb.fx, theta, lcb.Jg);
-      wsp.liteIdx = -1;
-    }
-    double out;
-    if (linCmtBquery(lcb, wsp, rx, ind, op, idx, _t, ncmt, oral0, which1, which2, trans,
-                     p1, v1, p2, p3, p4, p5, ka, &out)) {
-      return out;
-    }
-  } else if (!lcb.lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
-    linCmtBsetModel(lcb, wsp, ncmt, oral0, trans, IND(ind, linSS), rx);
-  } else {
+  if (which1 == -1 && which2 == -1 &&
+      lcb.lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
     // Last-row value memo: the generated model executes this value call
     // many times per row (compute phase and restore path alike); a repeat
     // with an identical key returns the cached result with J/Jg/fx left
     // standing for the reads.  The key covers every input the value
     // depends on; sentinels and reshapes invalidate (see linCmtBquery /
-    // linCmtBsetModel).
-    const double args[7] = {p1, v1, p2, p3, p4, p5, ka};
-    if (wsp.memoIdx == idx && wsp.memoT == _t &&
+    // linCmtBsetModel).  Doubles compare bitwise: rxode2 leaves
+    // ind->linCmtH NaN on AD solves, which never equals itself.  The row's
+    // fx/J/Jg live with the thread slot, so the hit also needs this slot to
+    // hold this individual's row.
+    if (lcb.memoOwner == &wsp && wsp.memoIdx == idx && linCmtSameBits(wsp.memoT, _t) &&
         wsp.memoFlag == IND(ind, _rxFlag) && wsp.memoDoSS == (int)IND(ind, doSS) &&
         wsp.memoHpar == IND(ind, linCmtHparIndex) &&
-        wsp.memoH == IND(ind, linCmtH) && wsp.memoHV == IND(ind, linCmtHV) &&
-        memcmp(wsp.memoArgs, args, sizeof(args)) == 0) {
+        linCmtSameBits(wsp.memoH, IND(ind, linCmtH)) &&
+        linCmtSameBits(wsp.memoHV, IND(ind, linCmtHV)) &&
+        linCmtSameBits(wsp.memoArgs[0], p1) && linCmtSameBits(wsp.memoArgs[1], v1) &&
+        linCmtSameBits(wsp.memoArgs[2], p2) && linCmtSameBits(wsp.memoArgs[3], p3) &&
+        linCmtSameBits(wsp.memoArgs[4], p4) && linCmtSameBits(wsp.memoArgs[5], p5) &&
+        linCmtSameBits(wsp.memoArgs[6], ka)) {
 #pragma omp atomic
       linCmtMemoHitN++;
       return wsp.memoVal;
     }
-    lcb.lc.setSsType(IND(ind, linSS));
   }
-  // Thin value path (the dydt/calc_lhs consolidation, linCmtB only): an
-  // already-solved row's value re-execution (the calc_lhs walk and the
-  // output pass) needs only fx and the concentration scaling -- skip
-  // sensTheta, the SS setup, the rate cache, the m x npars Jacobian
-  // restore and getJacCp.  J/Jg are left stale for the row and restored
-  // lazily if a call-form query (carry sentinel/read) follows.
-  // FD-perturbed evaluations keep the full path.
-  if (which1 == -1 && which2 == -1 &&
-      IND(ind, linCmtAlast) == NULL && IND(ind, linCmtHparIndex) < -1 &&
-      ((!IND(ind, doSS) && IND(ind, solvedIdx) >= idx) || IND(ind, _rxFlag) == 11)) {
-    Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
-      thetaL(getLinCmtDoubleAddr(lcb, linCmtBaddrTheta), lcb.lc.getNpars());
-    linCmtFillTheta(thetaL, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
-    lcb.lc.restoreFxTo(getAdvan(idx), lcb.fx);
-    double val = lcb.lc.adjustF(lcb.fx, thetaL, IND(ind, linCmtHV));
-#pragma omp atomic
-    linCmtValLiteN++;
-    wsp.liteIdx = idx;
-    wsp.memoIdx = idx; wsp.memoT = _t;
-    wsp.memoFlag = IND(ind, _rxFlag); wsp.memoDoSS = (int)IND(ind, doSS);
-    wsp.memoHpar = IND(ind, linCmtHparIndex);
-    wsp.memoH = IND(ind, linCmtH); wsp.memoHV = IND(ind, linCmtHV);
-    wsp.memoArgs[0] = p1; wsp.memoArgs[1] = v1; wsp.memoArgs[2] = p2;
-    wsp.memoArgs[3] = p3; wsp.memoArgs[4] = p4; wsp.memoArgs[5] = p5;
-    wsp.memoArgs[6] = ka;
-    wsp.memoVal = val;
-    return val;
-  }
-  if (id == 0 && IND(ind, linH)[0] == 0) {
-    lcb.lc.resetFlags();
-  }
-  lcb.lc.setId(id);
-
-  Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
-    theta(getLinCmtDoubleAddr(lcb, linCmtBaddrTheta), lcb.lc.getNpars());
-  linCmtFillTheta(theta, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
-
-  Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1> >
-    thetaSens(getLinCmtDoubleAddr(lcb, linCmtBaddrThetaSens), lcb.numSens);
-
-  // isAD (unscaled thetaSens + passthrough trueTheta) is used by every AD
-  // jacobian path: forward-mode (3/30/auto), reverse-mode (31). The finite
-  // difference methods keep the scaled path.
-  lcb.lc.sensTheta(theta, thetaSens, linCmtSensIsAD(RXS(rx, sensType)), RXS(rx, linCmtScale));
-  linCmtBsetupSs(lcb.lc, ind);
-
-  double *r = getLinRate;
-  linCmtBcacheRate(ind, op, idx, r);
-  double *a = (IND(ind, linCmtAlast) == NULL) ? getAdvan(IND(ind, solvedIdx)) : IND(ind, linCmtAlast);
-  lcb.lc.setPtr(a, r, IND(ind, linCmtSave));
-
-  linCmtBsolveRow(lcb, wsp, rx, ind, op, id, idx, _t, a, r, ncmt, oral0, trans, theta, thetaSens);
-  // Keep the per-origin decomposition (which1 = -9/-10) in step, but only on
-  // a row that is GENUINELY being solved -- never on a restore/lhs re-query
-  // (it would advance the state twice) and never on an H-perturbed
-  // evaluation (its amounts belong to a perturbed parameter, not the solve).
-  // Opt-in: a model that moves or scales no linCmt() dose pays nothing.
-  if (OPT(op, linCmtOriginMask) != 0 && IND(ind, _rxFlag) != 11) {
-    if (IND(ind, doSS) || IND(ind, solvedIdx) < idx) {
-      // trueTheta(thetaSens) is what linCmtBsolveRow() just advanced the
-      // amounts with, H perturbation and ndiff masking included, so the rows
-      // stay in step with them on every pass -- an H-optimization probe solve
-      // included, which is a genuine solve of its own (iniSubject() runs
-      // before it) and must not be left without a decomposition.
-      // trueTheta() takes a Matrix, and thetaSens is a Map over lcb's buffer.
-      Eigen::Matrix<double, Eigen::Dynamic, 1> tsOrig = thetaSens;
-      linCmtOriginAdvance(lcb.lc, ind, op, a, lcb.fx, r,
-                          lcb.lc.trueTheta(tsOrig), ncmt, oral0, trans, idx);
-    } else {
-      // A restored row advances nothing, but the FIRST record of a subject
-      // only ever restores -- its amounts are still the initial conditions --
-      // and the output pass has no other way to learn that its decomposition
-      // is a real, empty one.  Cache it once; a later restore of an index the
-      // solve has already moved past must not overwrite what it recorded.
-      int mOrig = ncmt + oral0;
-      double *slot = (mOrig > 0 && mOrig <= RX_LINCMT_ORIGIN_MAX) ?
-        linCmtOriginSlot(ind, idx, RX_LINCMT_ORIGIN_SLOTW(mOrig), 1) : NULL;
-      if (slot != NULL && slot[mOrig*RX_LINCMT_ORIGIN_MAX] == 0.0) {
-        linCmtOriginCacheRow(ind, idx, mOrig, IND(ind, linCmtOrigin),
-                             IND(ind, linCmtOriginSeeded));
-      }
-    }
-  }
-  lcb.lc.getJacCp(lcb.J, lcb.fx, theta, lcb.Jg);
-  double val = lcb.lc.adjustF(lcb.fx, theta, IND(ind, linCmtHV));
-  wsp.memoIdx = idx; wsp.memoT = _t;
-  wsp.memoFlag = IND(ind, _rxFlag); wsp.memoDoSS = (int)IND(ind, doSS);
-  wsp.memoHpar = IND(ind, linCmtHparIndex);
-  wsp.memoH = IND(ind, linCmtH); wsp.memoHV = IND(ind, linCmtHV);
-  wsp.memoArgs[0] = p1; wsp.memoArgs[1] = v1; wsp.memoArgs[2] = p2;
-  wsp.memoArgs[3] = p3; wsp.memoArgs[4] = p4; wsp.memoArgs[5] = p5;
-  wsp.memoArgs[6] = ka;
-  wsp.memoVal = val;
-  return val;
+  return linCmtBbody(lcb, wsp, rx, ind, id, idx, _t, ncmt, oral0, which1, which2,
+                     trans, p1, v1, p2, p3, p4, p5, ka);
 }
