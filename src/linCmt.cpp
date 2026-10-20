@@ -447,6 +447,7 @@ static inline void linCmtBsetModel(linB_t &lcb, linCmtBind &wsp,
                                    int linSS, rx_solve *rx) {
   wsp.memoIdx = -1; // reshape invalidates the last-row value memo
   wsp.liteIdx = -1;
+  lcb.memoOwner = NULL; // and the slot's fx/J/Jg belong to no row yet
   lcb.lc.setModelType(ncmt, oral0, trans, linSS, RXS(rx, ndiff));
   int npars = lcb.lc.getNpars();
   lcb.fx = Eigen::Matrix<double, Eigen::Dynamic, 1>(ncmt + oral0);
