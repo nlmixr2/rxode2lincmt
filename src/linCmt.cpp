@@ -383,6 +383,11 @@ typedef struct linCmtBind_s {
 // Allocated on first touch inside the solve; released with the subject in
 // rxFreeInd().  One individual is only ever solved by one thread at a time,
 // so this needs no locking.
+// Bitwise equality for cache keys (NaN matches NaN).
+static inline bool linCmtSameBits(double a, double b) {
+  return memcmp(&a, &b, sizeof(double)) == 0;
+}
+
 static inline linCmtBind &linCmtBindGet(rx_solving_options_ind *ind) {
   if (IND(ind, linCmtBind) == NULL) {
     IND(ind, linCmtBind) = (void*) new linCmtBind();
@@ -3139,12 +3144,14 @@ extern "C" double linCmtB(rx_solve *rx, int id,
     // with an identical key returns the cached result with J/Jg/fx left
     // standing for the reads.  The key covers every input the value
     // depends on; sentinels and reshapes invalidate (see linCmtBquery /
-    // linCmtBsetModel).
+    // linCmtBsetModel).  Doubles compare bitwise: nlmixr2est leaves
+    // ind->linCmtH NaN, which never equals itself.
     const double args[7] = {p1, v1, p2, p3, p4, p5, ka};
-    if (wsp.memoIdx == idx && wsp.memoT == _t &&
+    if (wsp.memoIdx == idx && linCmtSameBits(wsp.memoT, _t) &&
         wsp.memoFlag == IND(ind, _rxFlag) && wsp.memoDoSS == (int)IND(ind, doSS) &&
         wsp.memoHpar == IND(ind, linCmtHparIndex) &&
-        wsp.memoH == IND(ind, linCmtH) && wsp.memoHV == IND(ind, linCmtHV) &&
+        linCmtSameBits(wsp.memoH, IND(ind, linCmtH)) &&
+        linCmtSameBits(wsp.memoHV, IND(ind, linCmtHV)) &&
         memcmp(wsp.memoArgs, args, sizeof(args)) == 0) {
 #pragma omp atomic
       linCmtMemoHitN++;
