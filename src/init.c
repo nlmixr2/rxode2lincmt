@@ -35,6 +35,7 @@ SEXP _rxode2lincmt_linCmtCarryMaxPairs(void);
 SEXP _rxode2lincmt_carryRestartProbe(SEXP, SEXP);
 SEXP _rxode2lincmt_eventJacProbe(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP _rxode2lincmt_linCmtCarryFastStats(SEXP);
+SEXP _rxode2lincmt_carryEventProbe(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP _rxode2lincmt_linCmtCarryLiveTest(SEXP, SEXP, SEXP, SEXP, SEXP,
                                        SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP _rxode2lincmt_linCmtBSensTypesSeen(SEXP);
@@ -59,6 +60,7 @@ static const R_CallMethodDef callMethods[] = {
   {"_rxode2lincmt_carryRestartProbe", (DL_FUNC) &_rxode2lincmt_carryRestartProbe, 2},
   {"_rxode2lincmt_eventJacProbe", (DL_FUNC) &_rxode2lincmt_eventJacProbe, 7},
   {"_rxode2lincmt_linCmtCarryFastStats", (DL_FUNC) &_rxode2lincmt_linCmtCarryFastStats, 1},
+  {"_rxode2lincmt_carryEventProbe", (DL_FUNC) &_rxode2lincmt_carryEventProbe, 10},
   {"_rxode2lincmt_linCmtCarryLiveTest", (DL_FUNC) &_rxode2lincmt_linCmtCarryLiveTest, 10},
   {"_rxode2lincmt_linCmtBSensTypesSeen", (DL_FUNC) &_rxode2lincmt_linCmtBSensTypesSeen, 1},
   {"_rxode2lincmt_linCmtBThreadsSeen", (DL_FUNC) &_rxode2lincmt_linCmtBThreadsSeen, 1},
