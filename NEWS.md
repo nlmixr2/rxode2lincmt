@@ -1,3 +1,20 @@
+# rxode2lincmt (development version)
+
+## Bug fixes
+
+- The `linCmt()` sensitivity carry reads its column count from the
+  registered 'rxode2' at run time (`.linCmtCarryMaxPairs()`) instead of
+  compiling in 8.  Any 'rxode2' with 1 to 32 carry columns works with this
+  package; one with more, or with none, is refused at load with a message.
+  The carry advance also multiplies only the columns a model uses.
+
+## New features
+
+- `linCmtCarryReset()`, slot 9 of the pointer table (read with
+  `iniRxode2lincmtCarryReset()`), zeroes only the carry columns a subject
+  has written since its last reset, so 'rxode2' need not clear the whole
+  array for every subject of every solve.
+
 # rxode2lincmt 0.1.1
 
 ## New features
@@ -9,13 +26,6 @@
   the rest of the per-row work.  Results are bitwise unchanged (#2).
 
 ## Bug fixes
-
-- The `linCmt()` sensitivity carry reads its column count from the
-  registered 'rxode2' at run time (`.linCmtCarryMaxPairs()`) instead of
-  compiling in 8.  Any 'rxode2' with up to 32 carry columns works with this
-  package, and one with more is refused at load with a message to update
-  'rxode2lincmt'.  The carry advance also multiplies only the columns a
-  model uses.
 
 - The last-row value memo of `linCmt()` never hit inside an 'nlmixr2est' fit,
   because 'nlmixr2est' leaves the finite-difference step NaN and NaN never
