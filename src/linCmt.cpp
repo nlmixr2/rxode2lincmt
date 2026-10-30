@@ -2824,9 +2824,10 @@ static inline bool linCmtBcarryFast(rx_solving_options_ind *ind, const double *t
 // column) is zeroed or scaled.  A record's event applies after its own row,
 // so it is the record before this row that is read, before this row's
 // advance.  The constant-theta fast path does not telescope across such an
-// event, so the subject leaves it for the pass.  F is not known here: with
-// f() (or alag()) modeled on the compartment (op->linCmtOriginMask) a
-// multiply's row is NA rather than a guess.
+// event, so the subject leaves it for the pass.  F is not known here, so
+// with f() (or alag()) modeled on the compartment (op->linCmtOriginMask) a
+// multiply leaves the row and the fast path as they are, which is what the
+// carry did with every replace and multiply before it handled them.
 static inline void linCmtBcarryEvent(rx_solving_options_ind *ind,
                                      rx_solving_options *op, int idx, int m) {
   if (idx <= 0) return;
@@ -2836,10 +2837,8 @@ static inline void linCmtBcarryEvent(rx_solving_options_ind *ind,
   if (whI != EVIDF_REPLACE && whI != EVIDF_MULT) return;
   int c = cmt - OPT(op, linOffset);
   if (c < 0 || c >= m) return;
-  double k = 0.0;
-  if (whI == EVIDF_MULT) {
-    k = (OPT(op, linCmtOriginMask) & (1 << c)) ? NA_REAL : getDose(ind, kPrev);
-  }
+  if (whI == EVIDF_MULT && (OPT(op, linCmtOriginMask) & (1 << c))) return;
+  double k = (whI == EVIDF_MULT) ? getDose(ind, kPrev) : 0.0;
   for (int p = 0; p < RX_LINCMT_CARRY_MAXPAIRS; ++p) {
     double &v = IND(ind, linCmtCarryT)[c*RX_LINCMT_CARRY_MAXPAIRS + p];
     v = (whI == EVIDF_REPLACE) ? 0.0 : k*v;
