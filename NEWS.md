@@ -27,6 +27,14 @@
 
 ## Bug fixes
 
+- The `linCmt()` sensitivity carry, which 'nlmixr2est' uses for the FOCEi
+  gradient of a `linCmt()` parameter with a time-varying covariate, now
+  restarts at a reset (EVID 3, and the reset an EVID 4 begins with).  The
+  reset zeroes the compartments, but the carried sensitivities and their
+  trackers kept their values from before it, so such a fit with a reset
+  was off the same model written as ODEs (0.063 in the objective with an
+  EVID 4 under nocb).
+
 - The last-row value memo of `linCmt()` never hit inside an 'nlmixr2est' fit,
   because 'nlmixr2est' leaves the finite-difference step NaN and NaN never
   equals itself; every repeated call the model makes for a row recomputed

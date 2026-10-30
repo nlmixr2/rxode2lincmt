@@ -2908,6 +2908,19 @@ static inline double linCmtBcarryAdvance(linB_t &lcb, rx_solve *rx,
   if (which2 < 0 || pair >= cap) return NA_REAL;
   int slot = row*cap + pair;
   if (which1 == -6) return IND(ind, linCmtCarryT)[slot];
+  // A reset (EVID 3, which an EVID 4 begins with) zeroes the compartments
+  // and with them the cumulative Jacobian, so every carry column (the
+  // carried sensitivities, their trackers, the amounts column) restarts
+  // from 0, as after iniSubject().  Tlast restarts too: the next row
+  // advances zero columns, so its interval does not matter, and a reset
+  // shifts the solve's time.
+  if (idx >= 0 && getEvid(ind, IND(ind, ix)[idx]) == 3) {
+    for (int k = 0; k < 4*RX_LINCMT_CARRY_MAXPAIRS; ++k) {
+      IND(ind, linCmtCarryT)[k] = 0.0;
+    }
+    IND(ind, linCmtCarryTlast) = NAN;
+    return 0.0;
+  }
 #pragma omp atomic
   linCmtCarryAdvCallsN++;
   double thNow[7] = {p1, v1, p2, p3, p4, p5, ka};
