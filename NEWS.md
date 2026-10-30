@@ -36,10 +36,12 @@
   was off the same model written as ODEs (0.063 in the objective with an
   EVID 4 under nocb).  A replace (EVID 5) or multiply (EVID 6) record, from
   the data or pushed by `evid_()`, now zeroes or scales the replaced
-  compartment's carried sensitivities; they used to keep their values, and
-  the carried gradient after the event was off by 78% (with rxode2lincmt's
-  own Jacobian fix for these events; with `f()` modeled on the compartment a
-  multiply gives NA).
+  compartment's carried sensitivities, which used to keep their values.
+  The carried gradient after such a record is exact only together with
+  `linCmtEventJac()`, which makes this package's own Jacobian follow the
+  event; without it, it is no worse than before.  With `f()` or `alag()`
+  modeled on the compartment the carry does not know a multiply's factor
+  and leaves that compartment's sensitivities as before.
 
 - The last-row value memo of `linCmt()` never hit inside an 'nlmixr2est' fit,
   because 'nlmixr2est' leaves the finite-difference step NaN and NaN never
