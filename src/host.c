@@ -51,10 +51,16 @@ SEXP _rxode2lincmt_iniHost(SEXP p) {
     int *po = INTEGER(o);
     // The carry kernels index ind->linCmtCarryT with the host's cap; a host
     // with more columns than RXLC_CARRY_MAXPAIRS would overrun the scratch
-    // they are sized for, so it is refused before anything is copied.
+    // they are sized for, and one with none has no array to index, so both
+    // are refused before anything is copied.  -1 is the unregistered value
+    // every offset starts at (the tests restore it).
     if (no > lcOffCarryMax && po[lcOffCarryMax] > RXLC_CARRY_MAXPAIRS) {
       Rf_error("rxode2 has %d linCmt() carry columns, but this rxode2lincmt supports at most %d; update rxode2lincmt",
                po[lcOffCarryMax], RXLC_CARRY_MAXPAIRS);
+    }
+    if (no > lcOffCarryMax && po[lcOffCarryMax] < 1 && po[lcOffCarryMax] != -1) {
+      Rf_error("rxode2 reports %d linCmt() carry columns; it needs at least 1",
+               po[lcOffCarryMax]);
     }
     for (int k = 0; k < no && k < lcOffN; ++k) {
       _lcOff[k] = (ptrdiff_t) po[k];
