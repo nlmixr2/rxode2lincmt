@@ -9,9 +9,9 @@
  * every field through those offsets (see src/lcHost.h).
  *
  * APPEND ONLY.  The row order is the wire order; a released rxode2 built
- * against an older list keeps working with a newer rxode2lincmt.  Nothing
- * checks this list at load -- rxode2 enforces the types at its own compile
- * time with RXLC_HOST_STATIC_CHECKS.
+ * against an older list keeps working with a newer rxode2lincmt.  At load
+ * only the carry cap is checked (see RXLC_CARRY_MAXPAIRS) -- rxode2 enforces
+ * the types at its own compile time with RXLC_HOST_STATIC_CHECKS.
  *
  * Wire format (VECSXP):
  *   [0] INTSXP: sizeof(rx_solving_options_ind), RX_LINCMT_CARRY_MAXPAIRS,
@@ -22,10 +22,14 @@
  */
 #include <stddef.h>
 
-/* Array sizes are part of the contract: fixed here, never taken from the
-   includer.  RXLC_HOST_STATIC_CHECKS fails rxode2's compile if its own
-   RX_LINCMT_* values ever differ. */
-#define RXLC_CARRY_MAXPAIRS 8
+/* RXLC_CARRY_MAXPAIRS is the most carry pairs this rxode2lincmt supports.
+   The host's own cap, its RX_LINCMT_CARRY_MAXPAIRS (sent as [0][1] of the
+   wire), sizes ind->linCmtCarryT and is the stride and the bound at run
+   time; a host cap past RXLC_CARRY_MAXPAIRS stops at load.
+   RXLC_ORIGIN_MAX is fixed here, never taken from the includer.
+   RXLC_HOST_STATIC_CHECKS fails rxode2's compile if its own RX_LINCMT_*
+   values are out of range. */
+#define RXLC_CARRY_MAXPAIRS 32
 #define RXLC_ORIGIN_MAX 4
 #ifndef RX_LINCMT_CARRY_MAXPAIRS
 #define RX_LINCMT_CARRY_MAXPAIRS RXLC_CARRY_MAXPAIRS
@@ -80,7 +84,7 @@
   X(ind, linCmtRateHist, double*, )                                          \
   X(ind, linCmtRateHistCap, int, )                                           \
   X(ind, linCmtRateHistW, int, )                                             \
-  X(ind, linCmtCarryT, double, [4*RXLC_CARRY_MAXPAIRS])                 \
+  X(ind, linCmtCarryT, double, [4*RX_LINCMT_CARRY_MAXPAIRS])            \
   X(ind, linCmtCarryTlast, double, )                                         \
   X(ind, linCmtCarryPrevTheta, double, [7])                                  \
   X(ind, linCmtCarryVarying, int, )                                          \
@@ -119,8 +123,9 @@
   static_assert(std::is_same<decltype(((RXLC_STRUCT_##s*)0)->f), t d>::value, \
                 "rxode2lincmt host field type changed: " #s "." #f);
 #define RXLC_HOST_STATIC_CHECKS                                              \
-  static_assert(RX_LINCMT_CARRY_MAXPAIRS == RXLC_CARRY_MAXPAIRS,             \
-                "RX_LINCMT_CARRY_MAXPAIRS changed: rxode2lincmt must change with it"); \
+  static_assert(RX_LINCMT_CARRY_MAXPAIRS >= 1 &&                             \
+                RX_LINCMT_CARRY_MAXPAIRS <= RXLC_CARRY_MAXPAIRS,             \
+                "RX_LINCMT_CARRY_MAXPAIRS is past what rxode2lincmt supports"); \
   static_assert(RX_LINCMT_ORIGIN_MAX == RXLC_ORIGIN_MAX,                     \
                 "RX_LINCMT_ORIGIN_MAX changed: rxode2lincmt must change with it"); \
   RXLC_HOST_FIELDS(RXLC_CHECK1_)
