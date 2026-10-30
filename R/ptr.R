@@ -16,8 +16,9 @@
 #' Register the host table from rxode2
 #'
 #' rxode2 calls this from its `.onLoad()` with the struct offsets and host
-#' functions described in `inst/include/rxode2lincmtHost.h`.  Nothing is
-#' validated; values are copied with bounds limits only.
+#' functions described in `inst/include/rxode2lincmtHost.h`.  Values are
+#' copied with bounds limits only; a host with more `linCmt()` carry columns
+#' than this package supports (see `.linCmtCarryMaxPairs()`) is an error.
 #'
 #' @param host list built by rxode2 (offsets followed by external pointers)
 #' @return `NULL`, invisibly

@@ -102,6 +102,20 @@ linCmtModelDouble <- function(dt, p1, v1, p2, p3, p4, p5, ka, alastNV, rateNV, n
     .Call(`_rxode2lincmt_linCmtCarrySentinelMax`)
 }
 
+#' Carry pairs the registered rxode2 has room for
+#'
+#' The `linCmt()` carry keeps one column per carry-eligible (linCmt
+#' parameter, eta) pair in rxode2's subject struct; rxode2's
+#' `RX_LINCMT_CARRY_MAXPAIRS` sets how many, and this package indexes them
+#' with that cap.  nlmixr2est keeps a model's carry within it.
+#' @return integer: the cap of the registered rxode2, and 8 before one
+#'   registers
+#' @keywords internal
+#' @export
+.linCmtCarryMaxPairs <- function() {
+    .Call(`_rxode2lincmt_linCmtCarryMaxPairs`)
+}
+
 #' Read (and optionally reset) the linCmt() carry-advance fast-path counters
 #'
 #' @param reset logical; when TRUE zero the counters after reading

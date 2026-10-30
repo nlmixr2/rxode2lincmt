@@ -86,6 +86,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// linCmtCarryMaxPairs
+IntegerVector linCmtCarryMaxPairs();
+RcppExport SEXP _rxode2lincmt_linCmtCarryMaxPairs() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(linCmtCarryMaxPairs());
+    return rcpp_result_gen;
+END_RCPP
+}
 // linCmtCarryFastStats
 NumericVector linCmtCarryFastStats(bool reset);
 RcppExport SEXP _rxode2lincmt_linCmtCarryFastStats(SEXP resetSEXP) {
