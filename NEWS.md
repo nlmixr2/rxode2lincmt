@@ -6,7 +6,8 @@
   registered 'rxode2' at run time (`.linCmtCarryMaxPairs()`) instead of
   compiling in 8.  Any 'rxode2' with 1 to 32 carry columns works with this
   package; one with more, or with none, is refused at load with a message.
-  The carry advance also multiplies only the columns a model uses.
+  The carry advance also multiplies only the columns a model uses, and the
+  restart at a reset clears only those, at the host's stride.
 
 ## New features
 

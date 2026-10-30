@@ -430,6 +430,50 @@ extern "C" void linCmtCarryReset(rx_solving_options_ind *ind) {
   b->carryNpair = 0;
 }
 
+// The carry's restart at a reset record: the columns written are zeroed at
+// the host's stride (linCmtCarryReset()), and Tlast restarts too: the next
+// row advances zero columns, so its interval does not matter, and a reset
+// shifts the solve's time.
+static inline void linCmtCarryRestart(rx_solving_options_ind *ind) {
+  linCmtCarryReset(ind);
+  IND(ind, linCmtCarryTlast) = NAN;
+}
+
+// Test hook: linCmtCarryRestart() on a synthetic subject whose host has `cap`
+// carry columns and `npair` of them written.  Every double of the array (4
+// rows of RXLC_CARRY_MAXPAIRS) and 8 past it starts at 7; returns them all
+// after the restart, so a restart that writes past the host's 4*cap shows.
+extern "C" SEXP _rxode2lincmt_carryRestartProbe(SEXP capS, SEXP npairS) {
+  struct {
+    double carry[4*RXLC_CARRY_MAXPAIRS + 8];
+    double tlast;
+    void *bind;
+  } fake;
+  const int nd = 4*RXLC_CARRY_MAXPAIRS + 8;
+  for (int k = 0; k < nd; ++k) fake.carry[k] = 7.0;
+  fake.tlast = 1.0;
+  linCmtBind *b = new linCmtBind();
+  b->carryNpair = Rf_asInteger(npairS);
+  fake.bind = (void*)b;
+  ptrdiff_t old[4] = {_lcOff[lcOffCarryMax], _lcOff[lcOff_indlinCmtCarryT],
+                      _lcOff[lcOff_indlinCmtCarryTlast], _lcOff[lcOff_indlinCmtBind]};
+  _lcOff[lcOffCarryMax] = Rf_asInteger(capS);
+  _lcOff[lcOff_indlinCmtCarryT] = offsetof(decltype(fake), carry);
+  _lcOff[lcOff_indlinCmtCarryTlast] = offsetof(decltype(fake), tlast);
+  _lcOff[lcOff_indlinCmtBind] = offsetof(decltype(fake), bind);
+  linCmtCarryRestart((rx_solving_options_ind*)&fake);
+  _lcOff[lcOffCarryMax] = old[0];
+  _lcOff[lcOff_indlinCmtCarryT] = old[1];
+  _lcOff[lcOff_indlinCmtCarryTlast] = old[2];
+  _lcOff[lcOff_indlinCmtBind] = old[3];
+  delete b;
+  SEXP ret = PROTECT(Rf_allocVector(REALSXP, nd + 1));
+  for (int k = 0; k < nd; ++k) REAL(ret)[k] = fake.carry[k];
+  REAL(ret)[nd] = fake.tlast;
+  UNPROTECT(1);
+  return ret;
+}
+
 extern "C" void linCmtBindFree(rx_solving_options_ind *ind) {
   if (IND(ind, linCmtBind) != NULL) {
     linCmtCarryReset(ind);
@@ -2911,14 +2955,9 @@ static inline double linCmtBcarryAdvance(linB_t &lcb, rx_solve *rx,
   // A reset (EVID 3, which an EVID 4 begins with) zeroes the compartments
   // and with them the cumulative Jacobian, so every carry column (the
   // carried sensitivities, their trackers, the amounts column) restarts
-  // from 0, as after iniSubject().  Tlast restarts too: the next row
-  // advances zero columns, so its interval does not matter, and a reset
-  // shifts the solve's time.
+  // from 0, as after iniSubject().
   if (idx >= 0 && getEvid(ind, IND(ind, ix)[idx]) == 3) {
-    for (int k = 0; k < 4*RX_LINCMT_CARRY_MAXPAIRS; ++k) {
-      IND(ind, linCmtCarryT)[k] = 0.0;
-    }
-    IND(ind, linCmtCarryTlast) = NAN;
+    linCmtCarryRestart(ind);
     return 0.0;
   }
 #pragma omp atomic

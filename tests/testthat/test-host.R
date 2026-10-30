@@ -69,3 +69,22 @@ test_that("a host with more carry columns than this package supports is refused"
   )
   expect_identical(.rxode2lincmtHostInfo()$offsets, .o)
 })
+
+test_that("a carry restart at a reset clears only the columns written, at the host's stride", {
+  # an 8-column host with pairs 0-2 written: the array is 4 rows of 8, and
+  # nothing past it (the next fields of a real subject) may be touched
+  .r <- .Call(`_rxode2lincmt_carryRestartProbe`, 8L, 3L)
+  .m <- matrix(.r[1:32], nrow = 4, byrow = TRUE)
+  expect_true(all(.m[, 1:3] == 0))
+  expect_true(all(.m[, 4:8] == 7))
+  expect_true(all(.r[33:136] == 7))
+  # Tlast restarts
+  expect_true(is.nan(.r[137]))
+  # a 32-column host with every pair written clears its whole array, and no more
+  .r <- .Call(`_rxode2lincmt_carryRestartProbe`, 32L, 32L)
+  expect_true(all(.r[1:128] == 0))
+  expect_true(all(.r[129:136] == 7))
+  # nothing written, nothing cleared
+  .r <- .Call(`_rxode2lincmt_carryRestartProbe`, 8L, 0L)
+  expect_true(all(.r[1:136] == 7))
+})
