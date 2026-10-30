@@ -89,6 +89,16 @@ static inline void iniRxode2lincmtPtrs0(SEXP p) {
   _RXLC_NEXT(_p_linCmtFreeInd, rxLcIndFree_t);
 }
 
+/* Slot 9, linCmtCarryReset(ind): zeroes the linCmt() carry columns a
+   subject has written since its last reset, for the consumer's per-subject
+   setup.  Read by its own call, so a consumer built before it needs no
+   variable for it; *out keeps its stub when the list is shorter. */
+static inline void iniRxode2lincmtCarryReset(SEXP p, rxLcIndFree_t *out) {
+  if (Rf_length(p) > 9) {
+    *out = (rxLcIndFree_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 9));
+  }
+}
+
 #if defined(__cplusplus)
 }
 #endif
