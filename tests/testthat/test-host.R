@@ -61,4 +61,11 @@ test_that("a host with more carry columns than this package supports is refused"
   )
   expect_identical(.rxode2lincmtHostInfo()$offsets, .o)
   expect_identical(.linCmtCarryMaxPairs(), .cap0)
+  .w[2] <- 0L
+  expect_error(
+    .rxode2lincmtIniHost(list(.w)),
+    "rxode2 reports 0 linCmt() carry columns; it needs at least 1",
+    fixed = TRUE
+  )
+  expect_identical(.rxode2lincmtHostInfo()$offsets, .o)
 })
