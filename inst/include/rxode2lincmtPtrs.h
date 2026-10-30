@@ -27,6 +27,7 @@
   assigns slots the list provides; nothing is validated at load.
 */
 #include <Rinternals.h>
+#include <string.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -58,6 +59,8 @@ typedef void (*rxLcIndFree_t)(struct rx_solving_options_ind_s *ind);
 typedef double (*rxLcScaleInitPar_t)(int which);
 typedef double (*rxLcScaleInitN_t)(void);
 typedef int (*rxLcZeroJac_t)(int i);
+typedef void (*rxLcEventJac_t)(double *a, int numLin, int depotLin, int numLinSens,
+                               int c, int type, double factor);
 
 extern rxLcLinCmtA_t _p_linCmtA;                 /* 0 */
 extern rxLcLinCmtB_t _p_linCmtB;                 /* 1 */
@@ -96,6 +99,19 @@ static inline void iniRxode2lincmtPtrs0(SEXP p) {
 static inline void iniRxode2lincmtCarryReset(SEXP p, rxLcIndFree_t *out) {
   if (Rf_length(p) > 9) {
     *out = (rxLcIndFree_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 9));
+  }
+}
+
+/* Slot 10, linCmtEventJac(a, numLin, depotLin, numLinSens, c, type,
+   factor): after a replace (type 0) or multiply (type 1, by factor) of the
+   linCmt() block's compartment c, makes that compartment's Jacobian row in
+   the block `a` follow.  Read by its own call, and only from a list long
+   enough that names it in its slot; *out keeps its stub otherwise. */
+static inline void iniRxode2lincmtEventJac(SEXP p, rxLcEventJac_t *out) {
+  SEXP nm = Rf_getAttrib(p, R_NamesSymbol);
+  if (Rf_length(p) > 10 && nm != R_NilValue &&
+      strcmp(CHAR(STRING_ELT(nm, 10)), "linCmtEventJac") == 0) {
+    *out = (rxLcEventJac_t) R_ExternalPtrAddrFn(VECTOR_ELT(p, 10));
   }
 }
 

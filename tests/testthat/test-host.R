@@ -88,3 +88,30 @@ test_that("a carry restart at a reset clears only the columns written, at the ho
   .r <- .Call(`_rxode2lincmt_carryRestartProbe`, 8L, 0L)
   expect_true(all(.r[1:136] == 7))
 })
+
+# linCmtEventJac() on a copy of `a`
+.eventJac <- function(a, numLin, depotLin, numLinSens, c, type, factor = 1) {
+  .Call(`_rxode2lincmt_eventJacProbe`, a, numLin, depotLin, numLinSens, c, type, factor)
+}
+
+test_that("a replace or multiply makes only its compartment's Jacobian row follow", {
+  # 1-cmt: the amount, then d(A)/d(p1, v1)
+  .a <- c(5, 1.5, -2)
+  expect_identical(.eventJac(.a, 1L, 0L, 2L, 0L, 0L), c(5, 0, 0))
+  expect_identical(.eventJac(.a, 1L, 0L, 2L, 0L, 1L, 0.5), c(5, 0.75, -1))
+  # 2-cmt: two amounts, then a row of 4 per compartment
+  .a <- c(5, 3, 1:4, 5:8)
+  expect_identical(.eventJac(.a, 2L, 0L, 8L, 1L, 0L), c(5, 3, 1:4, rep(0, 4)))
+  expect_identical(.eventJac(.a, 2L, 0L, 8L, 0L, 1L, 2), c(5, 3, 2 * (1:4), 5:8))
+  # 1-cmt oral: depot and central amounts, central's row of 3, then the
+  # depot's one entry (ka)
+  .a <- c(4, 6, 1:3, 9)
+  expect_identical(.eventJac(.a, 2L, 1L, 4L, 1L, 0L), c(4, 6, 0, 0, 0, 9))
+  expect_identical(.eventJac(.a, 2L, 1L, 4L, 0L, 1L, 0.25), c(4, 6, 1:3, 2.25))
+  expect_identical(.eventJac(.a, 2L, 1L, 4L, 0L, 0L), c(4, 6, 1:3, 0))
+  # a multiply by 0 clears the row too
+  expect_identical(.eventJac(.a, 2L, 1L, 4L, 1L, 1L, 0), c(4, 6, 0, 0, 0, 9))
+  # a Jacobian of another size, or a compartment outside the block, is left
+  expect_identical(.eventJac(.a, 2L, 1L, 3L, 1L, 0L), .a)
+  expect_identical(.eventJac(.a, 2L, 1L, 4L, 2L, 0L), .a)
+})

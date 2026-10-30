@@ -474,6 +474,43 @@ extern "C" SEXP _rxode2lincmt_carryRestartProbe(SEXP capS, SEXP npairS) {
   return ret;
 }
 
+// A replace or multiply record (EVID 5/6, from the data or pushed by
+// evid_()) sets or scales one linCmt() compartment's amount; rxode2 calls
+// this right after, on the state's linCmt() block `a` (amounts, then the
+// Jacobian rows in the restoreJacTo() layout), so the compartment's
+// Jacobian row follows: in the linCmt() parameters a replaced amount
+// (F*amt) has derivative 0, and a multiplied one `factor` (F*amt) times
+// the old.  `type` is 0 for a replace and 1 for a multiply; c is the
+// compartment's index in the block (0 = depot when oral).  A block whose
+// Jacobian size is not this layout's (numLinSens) is left alone.
+extern "C" void linCmtEventJac(double *a, int numLin, int depotLin, int numLinSens,
+                               int c, int type, double factor) {
+  int oral0 = depotLin;
+  int ncmt = numLin - oral0;
+  int np = 2*ncmt + oral0;
+  if (a == NULL || ncmt < 1 || c < 0 || c >= numLin ||
+      numLinSens != np*ncmt + oral0) {
+    return;
+  }
+  int first = (c >= oral0) ? numLin + np*(c - oral0) : numLin + np*ncmt;
+  int n = (c >= oral0) ? np : 1;
+  for (int p = first; p < first + n; ++p) {
+    a[p] = (type == 0) ? 0.0 : factor*a[p];
+  }
+}
+
+// Test hook: linCmtEventJac() on a copy of `a`
+extern "C" SEXP _rxode2lincmt_eventJacProbe(SEXP aS, SEXP numLinS, SEXP depotLinS,
+                                            SEXP numLinSensS, SEXP cS, SEXP typeS,
+                                            SEXP factorS) {
+  SEXP ret = PROTECT(Rf_duplicate(aS));
+  linCmtEventJac(REAL(ret), Rf_asInteger(numLinS), Rf_asInteger(depotLinS),
+                 Rf_asInteger(numLinSensS), Rf_asInteger(cS), Rf_asInteger(typeS),
+                 Rf_asReal(factorS));
+  UNPROTECT(1);
+  return ret;
+}
+
 extern "C" void linCmtBindFree(rx_solving_options_ind *ind) {
   if (IND(ind, linCmtBind) != NULL) {
     linCmtCarryReset(ind);
