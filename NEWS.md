@@ -10,6 +10,13 @@
 
 ## Bug fixes
 
+- The `linCmt()` sensitivity carry reads its column count from the
+  registered 'rxode2' at run time (`.linCmtCarryMaxPairs()`) instead of
+  compiling in 8.  Any 'rxode2' with up to 32 carry columns works with this
+  package, and one with more is refused at load with a message to update
+  'rxode2lincmt'.  The carry advance also multiplies only the columns a
+  model uses.
+
 - The last-row value memo of `linCmt()` never hit inside an 'nlmixr2est' fit,
   because 'nlmixr2est' leaves the finite-difference step NaN and NaN never
   equals itself; every repeated call the model makes for a row recomputed
