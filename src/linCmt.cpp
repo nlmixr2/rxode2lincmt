@@ -382,6 +382,10 @@ typedef struct linCmtBind_s {
   int memoIdx = -1, memoFlag = -1, memoDoSS = -1, memoHpar = -9;
   double memoT = 0.0, memoH = 0.0, memoHV = 0.0, memoVal = 0.0;
   double memoArgs[7] = {0, 0, 0, 0, 0, 0, 0};
+  // Carry pair columns in use: one past the highest pair a -7 add has
+  // written.  Columns past it are still iniSubject()'s zeros, so the -5
+  // advance multiplies only these.
+  int carryNpair = 0;
 } linCmtBind;
 
 // Allocated on first touch inside the solve; released with the subject in
@@ -1842,6 +1846,21 @@ IntegerVector linCmtCarrySentinelMax() {
   return IntegerVector::create(8L);
 }
 
+//' Carry pairs the registered rxode2 has room for
+//'
+//' The `linCmt()` carry keeps one column per carry-eligible (linCmt
+//' parameter, eta) pair in rxode2's subject struct; rxode2's
+//' `RX_LINCMT_CARRY_MAXPAIRS` sets how many, and this package indexes them
+//' with that cap.  nlmixr2est keeps a model's carry within it.
+//' @return integer: the cap of the registered rxode2, and 8 before one
+//'   registers
+//' @keywords internal
+//' @export
+// [[Rcpp::export(.linCmtCarryMaxPairs)]]
+IntegerVector linCmtCarryMaxPairs() {
+  return IntegerVector::create(LC_CARRY_CAP);
+}
+
 //' Read (and optionally reset) the linCmt() carry-advance fast-path counters
 //'
 //' @param reset logical; when TRUE zero the counters after reading
@@ -1926,9 +1945,9 @@ NumericVector linCmtCarryLiveTest(int id, NumericVector t, NumericVector tPrior,
   for (int i = 0; i < n; i++) {
     if (which1[i] == -5 || which1[i] == -6 || which1[i] == -7) {
       int pair = which2[i] / m;
-      if (pair < 0 || pair >= RX_LINCMT_CARRY_MAXPAIRS) {
-        Rcpp::stop("carry pair index %d out of range (which2=%d, m=%d): at most RX_LINCMT_CARRY_MAXPAIRS=%d simultaneous carry-eligible (linCmt parameter, eta) pairs are supported",
-                   pair, which2[i], m, RX_LINCMT_CARRY_MAXPAIRS);
+      if (pair < 0 || pair >= LC_CARRY_CAP) {
+        Rcpp::stop("carry pair index %d out of range (which2=%d, m=%d): at most %d simultaneous carry-eligible (linCmt parameter, eta) pairs are supported (the RX_LINCMT_CARRY_MAXPAIRS of rxode2)",
+                   pair, which2[i], m, LC_CARRY_CAP);
       }
     }
     IND(ind, idx) = i;
@@ -2776,9 +2795,12 @@ static inline double linCmtBcarryAdd(rx_solving_options_ind *ind, int ncmt, int 
   if (m == 0) return NA_REAL;
   int row = which2 % m;
   int pair = which2 / m;
-  if (which2 < 0 || pair >= RX_LINCMT_CARRY_MAXPAIRS) return NA_REAL;
-  IND(ind, linCmtCarryT)[row*RX_LINCMT_CARRY_MAXPAIRS + pair] += p2;
-  return IND(ind, linCmtCarryT)[row*RX_LINCMT_CARRY_MAXPAIRS + pair];
+  int cap = LC_CARRY_CAP;
+  if (which2 < 0 || pair >= cap) return NA_REAL;
+  linCmtBind &b = linCmtBindGet(ind);
+  if (pair >= b.carryNpair) b.carryNpair = pair + 1;
+  IND(ind, linCmtCarryT)[row*cap + pair] += p2;
+  return IND(ind, linCmtCarryT)[row*cap + pair];
 }
 
 // Runtime per-subject fast path for the -5 advance (phase 3b.4): while this
@@ -2816,31 +2838,32 @@ static inline bool linCmtBcarryFast(rx_solving_options_ind *ind, const double *t
   return true;
 }
 
-// s_new = M * s_old for every pair column (top m rows; the untouched rows
-// stay 0 from iniSubject()'s reset).  localM is 4x4 row-major.
+// s_new = M * s_old for the npair pair columns in use (top m rows; the
+// untouched rows and columns stay 0 from iniSubject()'s reset).  localM is
+// 4x4 row-major; cap is the column stride of ind->linCmtCarryT.
 static inline void linCmtBcarryApplyM(rx_solving_options_ind *ind, const double *localM,
-                                      int m) {
-  double tNew[4*RX_LINCMT_CARRY_MAXPAIRS];
+                                      int m, int cap, int npair) {
+  double tNew[4*RXLC_CARRY_MAXPAIRS];
   for (int r = 0; r < m; r++) {
-    for (int c = 0; c < RX_LINCMT_CARRY_MAXPAIRS; c++) {
+    for (int c = 0; c < npair; c++) {
       double s = 0.0;
       for (int k2 = 0; k2 < m; k2++) {
         s += localM[r*4 + k2] *
-          IND(ind, linCmtCarryT)[k2*RX_LINCMT_CARRY_MAXPAIRS + c];
+          IND(ind, linCmtCarryT)[k2*cap + c];
       }
-      tNew[r*RX_LINCMT_CARRY_MAXPAIRS + c] = s;
+      tNew[r*RXLC_CARRY_MAXPAIRS + c] = s;
     }
   }
   for (int r = 0; r < m; r++) {
-    for (int c = 0; c < RX_LINCMT_CARRY_MAXPAIRS; c++) {
-      IND(ind, linCmtCarryT)[r*RX_LINCMT_CARRY_MAXPAIRS + c] =
-        tNew[r*RX_LINCMT_CARRY_MAXPAIRS + c];
+    for (int c = 0; c < npair; c++) {
+      IND(ind, linCmtCarryT)[r*cap + c] =
+        tNew[r*RXLC_CARRY_MAXPAIRS + c];
     }
   }
 }
 
 // which1 == -6 (read) / -5 (advance) of the cumulative carry
-// ind->linCmtCarryT (4 rows x RX_LINCMT_CARRY_MAXPAIRS columns, row-major;
+// ind->linCmtCarryT (4 rows x the host's cap of columns, row-major;
 // each column is one carry-eligible (linCmt-parameter, eta) pair's own
 // d(Alast)/d(eta) m-vector evolving as s_i = M_i*s_{i-1} + (-7 adds)).
 // which2 = row + m*pair is the encoding the carry codegen emits; a pair
@@ -2861,8 +2884,9 @@ static inline double linCmtBcarryAdvance(linB_t &lcb, rx_solve *rx,
   if (m == 0) return NA_REAL;
   int row = which2 % m;
   int pair = which2 / m;
-  if (which2 < 0 || pair >= RX_LINCMT_CARRY_MAXPAIRS) return NA_REAL;
-  int slot = row*RX_LINCMT_CARRY_MAXPAIRS + pair;
+  int cap = LC_CARRY_CAP;
+  if (which2 < 0 || pair >= cap) return NA_REAL;
+  int slot = row*cap + pair;
   if (which1 == -6) return IND(ind, linCmtCarryT)[slot];
 #pragma omp atomic
   linCmtCarryAdvCallsN++;
@@ -2891,7 +2915,7 @@ static inline double linCmtBcarryAdvance(linB_t &lcb, rx_solve *rx,
     linCmtBtransitionColumn(lcb.lc, gF, kaV, ncmt, m, c, colOut);
     for (int r = 0; r < m; r++) localM[r*4 + c] = colOut[r];
   }
-  linCmtBcarryApplyM(ind, localM, m);
+  linCmtBcarryApplyM(ind, localM, m, cap, linCmtBindGet(ind).carryNpair);
   return IND(ind, linCmtCarryT)[slot];
 }
 
