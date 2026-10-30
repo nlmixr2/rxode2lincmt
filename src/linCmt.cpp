@@ -2901,6 +2901,42 @@ static inline bool linCmtBcarryFast(rx_solving_options_ind *ind, const double *t
   return true;
 }
 
+// A replace or multiply record (EVID 5/6, from the data or pushed by
+// evid_()) sets or scales one compartment's amount outright.  In the
+// linCmt() parameters a replaced amount (F*amt) has derivative 0 and a
+// multiplied one F*amt times the old one, so that compartment's row of every
+// carry column (the carried sensitivities, their trackers, the amounts
+// column) is zeroed or scaled.  A record's event applies after its own row,
+// so it is the record before this row that is read, before this row's
+// advance.  The constant-theta fast path does not telescope across such an
+// event, so the subject leaves it for the pass.  F is not known here: with
+// f() (or alag()) modeled on the compartment (op->linCmtOriginMask) a
+// multiply's row is NA rather than a guess.
+static inline void linCmtBcarryEvent(rx_solving_options_ind *ind,
+                                     rx_solving_options *op, int idx, int m) {
+  if (idx <= 0) return;
+  int kPrev = IND(ind, ix)[idx - 1];
+  int wh, cmt, wh100, whI, wh0;
+  getWh(getEvid(ind, kPrev), &wh, &cmt, &wh100, &whI, &wh0);
+  if (whI != EVIDF_REPLACE && whI != EVIDF_MULT) return;
+  int c = cmt - OPT(op, linOffset);
+  if (c < 0 || c >= m) return;
+  double k = 0.0;
+  if (whI == EVIDF_MULT) {
+    k = (OPT(op, linCmtOriginMask) & (1 << c)) ? NA_REAL : getDose(ind, kPrev);
+  }
+  // at the host's stride, over the columns written (linCmtBind's
+  // carryNpair): those past it stay 0, which linCmtCarryReset() relies on
+  linCmtBind *b = (linCmtBind*)IND(ind, linCmtBind);
+  int npair = (b == NULL) ? 0 : b->carryNpair;
+  int cap = LC_CARRY_CAP;
+  for (int p = 0; p < npair; ++p) {
+    double &v = IND(ind, linCmtCarryT)[c*cap + p];
+    v = (whI == EVIDF_REPLACE) ? 0.0 : k*v;
+  }
+  IND(ind, linCmtCarryVarying) = 2;
+}
+
 // s_new = M * s_old for the npair pair columns in use (top m rows; the
 // rows past m and the columns past npair are zero, see linCmtBind's
 // carryNpair).  localM is 4x4 row-major; cap is the column stride of
@@ -2960,6 +2996,7 @@ static inline double linCmtBcarryAdvance(linB_t &lcb, rx_solve *rx,
     linCmtCarryRestart(ind);
     return 0.0;
   }
+  linCmtBcarryEvent(ind, op, idx, m);
 #pragma omp atomic
   linCmtCarryAdvCallsN++;
   double thNow[7] = {p1, v1, p2, p3, p4, p5, ka};
