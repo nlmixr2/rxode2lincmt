@@ -383,8 +383,11 @@ typedef struct linCmtBind_s {
   double memoT = 0.0, memoH = 0.0, memoHV = 0.0, memoVal = 0.0;
   double memoArgs[7] = {0, 0, 0, 0, 0, 0, 0};
   // Carry pair columns in use: one past the highest pair a -7 add has
-  // written.  Columns past it are still iniSubject()'s zeros, so the -5
-  // advance multiplies only these.
+  // written to this subject's ind->linCmtCarryT since its last
+  // linCmtCarryReset().  Every column past it is zero, so the -5 advance
+  // multiplies only these and the reset clears only these.  An rxode2 that
+  // clears the whole array itself never resets it; the mark then only
+  // grows, and a stale mark costs only multiplies of zero columns.
   int carryNpair = 0;
 } linCmtBind;
 
@@ -412,8 +415,24 @@ static inline linCmtBind &linCmtBindGet(rx_solving_options_ind *ind) {
   return *((linCmtBind*)(IND(ind, linCmtBind)));
 }
 
+// Zero the carry columns this subject has written since the last reset
+// (its linCmtBind carryNpair), and only those.  rxode2 calls it from
+// iniSubject() in place of clearing all of ind->linCmtCarryT.  With no bind
+// the array is already zero: a -7 add allocates the bind, and
+// linCmtBindFree() resets before releasing it.
+extern "C" void linCmtCarryReset(rx_solving_options_ind *ind) {
+  linCmtBind *b = (linCmtBind*)IND(ind, linCmtBind);
+  if (b == NULL || b->carryNpair == 0) return;
+  int cap = LC_CARRY_CAP;
+  for (int r = 0; r < 4; r++) {
+    memset(IND(ind, linCmtCarryT) + r*cap, 0, (size_t)b->carryNpair*sizeof(double));
+  }
+  b->carryNpair = 0;
+}
+
 extern "C" void linCmtBindFree(rx_solving_options_ind *ind) {
   if (IND(ind, linCmtBind) != NULL) {
+    linCmtCarryReset(ind);
     delete ((linCmtBind*)(IND(ind, linCmtBind)));
     IND(ind, linCmtBind) = NULL;
   }
@@ -2839,8 +2858,9 @@ static inline bool linCmtBcarryFast(rx_solving_options_ind *ind, const double *t
 }
 
 // s_new = M * s_old for the npair pair columns in use (top m rows; the
-// untouched rows and columns stay 0 from iniSubject()'s reset).  localM is
-// 4x4 row-major; cap is the column stride of ind->linCmtCarryT.
+// rows past m and the columns past npair are zero, see linCmtBind's
+// carryNpair).  localM is 4x4 row-major; cap is the column stride of
+// ind->linCmtCarryT.
 static inline void linCmtBcarryApplyM(rx_solving_options_ind *ind, const double *localM,
                                       int m, int cap, int npair) {
   double tNew[4*RXLC_CARRY_MAXPAIRS];
