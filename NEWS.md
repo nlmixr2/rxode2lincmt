@@ -16,6 +16,13 @@
   has written since its last reset, so 'rxode2' need not clear the whole
   array for every subject of every solve.
 
+- `linCmtEventJac()`, slot 10 of the pointer table (read with
+  `iniRxode2lincmtEventJac()`), makes a `linCmt()` compartment's Jacobian
+  row follow a replace (EVID 5) or multiply (EVID 6) of its amount: zero
+  after a replace, scaled by the factor after a multiply.  'rxode2' calls
+  it from its event handler; without it, the sensitivities after such a
+  record keep the compartment's history.
+
 # rxode2lincmt 0.1.1
 
 ## New features
