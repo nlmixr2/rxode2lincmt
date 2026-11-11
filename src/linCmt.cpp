@@ -2917,13 +2917,9 @@ struct lcCarryProbeOp {
   lcT_oplinCmtOriginMask linCmtOriginMask;
 };
 
-extern "C" SEXP _rxode2lincmt_carryEventProbe(SEXP evidS, SEXP doseS, SEXP thetaS,
-                                              SEXP MS, SEXP addS, SEXP ncmtS,
-                                              SEXP oral0S, SEXP maskS,
-                                              SEXP linOffsetS, SEXP fastS) {
-  int n = Rf_length(evidS);
-  int ncmt = Rf_asInteger(ncmtS), oral0 = Rf_asInteger(oral0S);
-  int m = linCmtCarryM(ncmt, oral0);
+// The probe's input checks; returns the pair count.
+static int lcCarryProbeNpair(SEXP evidS, SEXP doseS, SEXP thetaS, SEXP MS,
+                             SEXP addS, int n, int m) {
   if (n < 1 || m == 0 || TYPEOF(evidS) != INTSXP || TYPEOF(doseS) != REALSXP ||
       TYPEOF(thetaS) != REALSXP || TYPEOF(MS) != REALSXP || TYPEOF(addS) != REALSXP ||
       Rf_length(doseS) != n || Rf_length(thetaS) != 7*n || Rf_length(MS) != m*m*n ||
@@ -2934,6 +2930,60 @@ extern "C" SEXP _rxode2lincmt_carryEventProbe(SEXP evidS, SEXP doseS, SEXP theta
   if (npair < 1 || npair > RX_LINCMT_CARRY_MAXPAIRS) {
     Rf_error("carryEventProbe: 1 to %d pairs", RX_LINCMT_CARRY_MAXPAIRS);
   }
+  return npair;
+}
+
+// Points the offsets the carry reads at the probe's structs.
+static void lcCarryProbeSetOff(void) {
+  _lcOff[lcOff_indix] = offsetof(lcCarryProbeInd, ix);
+  _lcOff[lcOff_indevid] = offsetof(lcCarryProbeInd, evid);
+  _lcOff[lcOff_indextraDoseEvid] = offsetof(lcCarryProbeInd, extraDoseEvid);
+  _lcOff[lcOff_inddose] = offsetof(lcCarryProbeInd, dose);
+  _lcOff[lcOff_indextraDoseDose] = offsetof(lcCarryProbeInd, extraDoseDose);
+  _lcOff[lcOff_indlinCmtCarryT] = offsetof(lcCarryProbeInd, linCmtCarryT);
+  _lcOff[lcOff_indlinCmtCarryTlast] = offsetof(lcCarryProbeInd, linCmtCarryTlast);
+  _lcOff[lcOff_indlinCmtCarryPrevTheta] = offsetof(lcCarryProbeInd, linCmtCarryPrevTheta);
+  _lcOff[lcOff_indlinCmtCarryVarying] = offsetof(lcCarryProbeInd, linCmtCarryVarying);
+  _lcOff[lcOff_oplinOffset] = offsetof(lcCarryProbeOp, linOffset);
+  _lcOff[lcOff_oplinCmtOriginMask] = offsetof(lcCarryProbeOp, linCmtOriginMask);
+}
+
+// One probe row: the -5 advance, the -7 adds, then the carry into out.
+static void lcCarryProbeRow(lcCarryProbeInd *pind, lcCarryProbeOp *pop, int i,
+                            int n, int m, int ncmt, int oral0, int npair,
+                            const double *theta, const double *M,
+                            const double *add, double *out) {
+  rx_solving_options_ind *ind = (rx_solving_options_ind*)pind;
+  rx_solving_options *op = (rx_solving_options*)pop;
+  double th[7];
+  for (int j = 0; j < 7; ++j) th[j] = theta[i + n*j];
+  if (!linCmtBcarryPre(ind, op, i, m, th, (double)i)) {
+    double localM[16];
+    for (int r = 0; r < m; ++r) {
+      for (int c = 0; c < m; ++c) localM[r*4 + c] = M[r + m*c + m*m*i];
+    }
+    linCmtBcarryApplyM(ind, localM, m);
+  }
+  for (int p = 0; p < npair; ++p) {
+    for (int r = 0; r < m; ++r) {
+      linCmtBcarryAdd(ind, ncmt, oral0, r + m*p, add[i + n*r + n*m*p]);
+    }
+  }
+  for (int p = 0; p < npair; ++p) {
+    for (int r = 0; r < m; ++r) {
+      out[i + n*r + n*m*p] = pind->linCmtCarryT[r*RX_LINCMT_CARRY_MAXPAIRS + p];
+    }
+  }
+}
+
+extern "C" SEXP _rxode2lincmt_carryEventProbe(SEXP evidS, SEXP doseS, SEXP thetaS,
+                                              SEXP MS, SEXP addS, SEXP ncmtS,
+                                              SEXP oral0S, SEXP maskS,
+                                              SEXP linOffsetS, SEXP fastS) {
+  int n = Rf_length(evidS);
+  int ncmt = Rf_asInteger(ncmtS), oral0 = Rf_asInteger(oral0S);
+  int m = linCmtCarryM(ncmt, oral0);
+  int npair = lcCarryProbeNpair(evidS, doseS, thetaS, MS, addS, n, m);
   SEXP ret = PROTECT(Rf_allocVector(REALSXP, n*m*npair));
   double *out = REAL(ret);
   const double *theta = REAL(thetaS), *M = REAL(MS), *add = REAL(addS);
@@ -2952,41 +3002,11 @@ extern "C" SEXP _rxode2lincmt_carryEventProbe(SEXP evidS, SEXP doseS, SEXP theta
   // nothing below calls back into R until the offsets are restored
   ptrdiff_t saved[lcOffN];
   memcpy(saved, _lcOff, sizeof(saved));
-  _lcOff[lcOff_indix] = offsetof(lcCarryProbeInd, ix);
-  _lcOff[lcOff_indevid] = offsetof(lcCarryProbeInd, evid);
-  _lcOff[lcOff_indextraDoseEvid] = offsetof(lcCarryProbeInd, extraDoseEvid);
-  _lcOff[lcOff_inddose] = offsetof(lcCarryProbeInd, dose);
-  _lcOff[lcOff_indextraDoseDose] = offsetof(lcCarryProbeInd, extraDoseDose);
-  _lcOff[lcOff_indlinCmtCarryT] = offsetof(lcCarryProbeInd, linCmtCarryT);
-  _lcOff[lcOff_indlinCmtCarryTlast] = offsetof(lcCarryProbeInd, linCmtCarryTlast);
-  _lcOff[lcOff_indlinCmtCarryPrevTheta] = offsetof(lcCarryProbeInd, linCmtCarryPrevTheta);
-  _lcOff[lcOff_indlinCmtCarryVarying] = offsetof(lcCarryProbeInd, linCmtCarryVarying);
-  _lcOff[lcOff_oplinOffset] = offsetof(lcCarryProbeOp, linOffset);
-  _lcOff[lcOff_oplinCmtOriginMask] = offsetof(lcCarryProbeOp, linCmtOriginMask);
+  lcCarryProbeSetOff();
   int fastPrev = linCmtCarryFastEnabled;
   linCmtCarryFastEnabled = fast;
-  rx_solving_options_ind *ind = (rx_solving_options_ind*)&pind;
-  rx_solving_options *op = (rx_solving_options*)&pop;
   for (int i = 0; i < n; ++i) {
-    double th[7];
-    for (int j = 0; j < 7; ++j) th[j] = theta[i + n*j];
-    if (!linCmtBcarryPre(ind, op, i, m, th, (double)i)) {
-      double localM[16];
-      for (int r = 0; r < m; ++r) {
-        for (int c = 0; c < m; ++c) localM[r*4 + c] = M[r + m*c + m*m*i];
-      }
-      linCmtBcarryApplyM(ind, localM, m);
-    }
-    for (int p = 0; p < npair; ++p) {
-      for (int r = 0; r < m; ++r) {
-        linCmtBcarryAdd(ind, ncmt, oral0, r + m*p, add[i + n*r + n*m*p]);
-      }
-    }
-    for (int p = 0; p < npair; ++p) {
-      for (int r = 0; r < m; ++r) {
-        out[i + n*r + n*m*p] = pind.linCmtCarryT[r*RX_LINCMT_CARRY_MAXPAIRS + p];
-      }
-    }
+    lcCarryProbeRow(&pind, &pop, i, n, m, ncmt, oral0, npair, theta, M, add, out);
   }
   linCmtCarryFastEnabled = fastPrev;
   memcpy(_lcOff, saved, sizeof(saved));
