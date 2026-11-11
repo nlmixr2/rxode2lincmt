@@ -2057,31 +2057,24 @@ int linCmtBThreadsSeen(bool reset) {
  * @author Matthew Fidler
  *
  */
-extern "C" double linCmtA(rx_solve *rx, int id,
-                          double _t,
-                          int linCmt, int ncmt,
-                          int oral0, int which,
-                          int trans,
-                          double p1, double v1,
-                          double p2, double p3,
-                          double p4, double p5,
-                          // Oral parameters
-                          double ka) {
+// linCmtA() past the restored-row fast path: model (re)setup, the
+// steady-state setters, the pointers and the row solve.  Kept out of line so
+// the restored rows -- the calc_lhs walks of every solved record -- do not pay
+// this frame.
+static LINCMT_NOINLINE double linCmtAbody(linA_t &lca, rx_solve *rx,
+                                          rx_solving_options_ind *ind,
+                                          rx_solving_options *op, int idx,
+                                          double _t, int ncmt,
+                                          int oral0, int which,
+                                          int trans,
+                                          double p1, double v1,
+                                          double p2, double p3,
+                                          double p4, double p5,
+                                          double ka) {
 #define fx    lca.fx
-#define J     lca.J
-#define Jg    lca.Jg
 #define lc    lca.lc
 #define theta lca.theta
 #define yp    lca.yp
-  rx_solving_options_ind *ind = RX_IND(rx, id);
-  rx_solving_options *op = RXS(rx, op);
-  // get the linear solved system object.
-  // rx_get_thread() honors the cross-DLL thread-id override (see rxData.cpp /
-  // setRxThreadId): under an external OpenMP team rxode2's omp_get_thread_num()
-  // would return 0 for every worker, collapsing this per-thread linCmt scratch
-  // onto slot 0.  __linCmtB (line ~489) already uses rx_get_thread().
-  linA_t &lca = __linCmtA[rx_get_thread((int)__linCmtA.size())];
-  int idx = IND(ind, idx);
   // Create the solved system object
   if (!lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
     lc.setModelType(ncmt, oral0, trans, IND(ind, linSS), RXS(rx, ndiff));
@@ -2179,11 +2172,42 @@ extern "C" double linCmtA(rx_solve *rx, int id,
   // Invalid index
   return NA_REAL;
 #undef fx
-#undef J
-#undef Jg
 #undef lc
 #undef theta
 #undef yp
+}
+
+extern "C" double linCmtA(rx_solve *rx, int id,
+                          double _t,
+                          int linCmt, int ncmt,
+                          int oral0, int which,
+                          int trans,
+                          double p1, double v1,
+                          double p2, double p3,
+                          double p4, double p5,
+                          // Oral parameters
+                          double ka) {
+  (void)linCmt;
+  rx_solving_options_ind *ind = RX_IND(rx, id);
+  rx_solving_options *op = RXS(rx, op);
+  // rx_get_thread() honors the cross-DLL thread-id override (see rxData.cpp /
+  // setRxThreadId): under an external OpenMP team rxode2's omp_get_thread_num()
+  // would return 0 for every worker, collapsing this per-thread linCmt scratch
+  // onto slot 0.
+  linA_t &lca = __linCmtA[rx_get_thread((int)__linCmtA.size())];
+  int idx = IND(ind, idx);
+  // Restored row (already solved, not steady state): the amounts are in the
+  // solve, so the value is the central amount over Vc -- no setup, solve or
+  // copy.  Same arithmetic as restoreFxTo() + adjustF(fx, theta).
+  if (!IND(ind, doSS) && IND(ind, solvedIdx) >= idx &&
+      lca.lc.isSame(ncmt, oral0, trans, RXS(rx, ndiff))) {
+    double *acur = getAdvan(idx);
+    if (which >= 0) return acur[which];
+    linCmtFillTheta(lca.theta, ncmt, oral0, p1, v1, p2, p3, p4, p5, ka);
+    return acur[oral0] / lca.lc.getVc(lca.theta);
+  }
+  return linCmtAbody(lca, rx, ind, op, idx, _t, ncmt, oral0, which, trans,
+                     p1, v1, p2, p3, p4, p5, ka);
 }
 
 // These scaling/step-size helpers are read from the finite-difference H setup

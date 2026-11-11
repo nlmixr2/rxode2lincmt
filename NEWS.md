@@ -8,6 +8,10 @@
   instead of running the scaling setup, and the value-memo check runs before
   the rest of the per-row work.  Results are bitwise unchanged (#2).
 
+- `linCmt()` value-only solves (SAEM, `rxSolve()` simulation, pred-only
+  solves) return an already-solved row before any model setup.  Results are
+  bitwise unchanged (#9).
+
 ## Bug fixes
 
 - The last-row value memo of `linCmt()` never hit inside an 'nlmixr2est' fit,
