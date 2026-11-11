@@ -12,6 +12,9 @@
   solves) return an already-solved row before any model setup.  Results are
   bitwise unchanged (#9).
 
+- `linCmt()` value-only solves no longer allocate on each computed row.
+  Results are bitwise unchanged (#9).
+
 ## Bug fixes
 
 - The last-row value memo of `linCmt()` never hit inside an 'nlmixr2est' fit,

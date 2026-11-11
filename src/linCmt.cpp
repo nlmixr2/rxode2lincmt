@@ -2155,7 +2155,7 @@ static LINCMT_NOINLINE double linCmtAbody(linA_t &lca, rx_solve *rx,
 
       lc.linAcalcAlast(yp, lca.gg, theta);
 
-      fx = lc(theta);
+      lc.evalTo(theta, fx);
     }
     return lc.adjustF(fx, theta, IND(ind, linCmtHV));
   } else if (which >= 0 && which < nAlast) {

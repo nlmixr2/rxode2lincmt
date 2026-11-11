@@ -2373,8 +2373,13 @@ namespace stan {
                          const Eigen::Matrix<double, Eigen::Dynamic, 2>& g,
                          const Eigen::Matrix<double, Eigen::Dynamic, 1>& theta) {
         (void)yp; (void)g;
-        yp_ = getAlast(theta);
-        g_ = stan::math::macros2micros(theta, ncmt_, trans_);
+        // In place: no allocation once yp_/g_ are sized.  The in-place
+        // micro-constant conversion is statement for statement the same as
+        // macros2micros().
+        yp_.resize(ncmt_ + oral0_);
+        for (int i = oral0_ + ncmt_; i--;) yp_(i, 0) = A_[i];
+        g_.resize(ncmt_, 2);
+        stan::math::macros2microsInplace(theta, ncmt_, trans_, g_);
       }
 
       // For stan Jacobian to work the class needs to take 1 argument
@@ -2610,11 +2615,21 @@ namespace stan {
               const Eigen::Matrix<double, Eigen::Dynamic, 2>& g,
               const Eigen::Matrix<double, Eigen::Dynamic, 1>& yp) {
 
+        Eigen::Matrix<double, Eigen::Dynamic, 1> ret0(ncmt_ + oral0_, 1);
+        fdoubleTo(theta, g, yp, ret0);
+        return ret0;
+      }
+
+      // fdouble() into a caller-owned vector (no allocation once sized).
+      void fdoubleTo(const Eigen::Matrix<double, Eigen::Dynamic, 1>& theta,
+                     const Eigen::Matrix<double, Eigen::Dynamic, 2>& g,
+                     const Eigen::Matrix<double, Eigen::Dynamic, 1>& yp,
+                     Eigen::Matrix<double, Eigen::Dynamic, 1>& ret0) {
         double ka = 0.0;
         if (oral0_) {
           ka = theta[ncmt_*2];
         }
-        Eigen::Matrix<double, Eigen::Dynamic, 1> ret0(ncmt_ + oral0_, 1);
+        ret0.resize(ncmt_ + oral0_);
         if (type_ == linCmtNormal) {
           if (ncmt_ == 1) {
             linCmtStan1<double>(g, yp, ka, ret0);
@@ -2648,7 +2663,16 @@ namespace stan {
             linCmtStan3ssBolus(g, ka, ret0);
           }
         }
-        return ret0;
+      }
+
+      // operator()(theta) into a caller-owned vector: the value-path row
+      // without the return-value allocation.
+      void evalTo(const Eigen::Matrix<double, Eigen::Dynamic, 1>& theta,
+                  Eigen::Matrix<double, Eigen::Dynamic, 1>& fx) {
+        fdoubleTo(theta, g_, yp_, fx);
+        for (int i = 0; i < ncmt_ + oral0_; i++) {
+          Asave_[i] = fx(i, 0);
+        }
       }
 
       Eigen::Matrix<double, Eigen::Dynamic, 1> operator()(const Eigen::Matrix<double, Eigen::Dynamic, 1>& theta) {
