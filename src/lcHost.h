@@ -43,6 +43,10 @@ extern ptrdiff_t _lcOff[lcOffN];
                                                   (ptrdiff_t)(id)*_lcOff[lcOffIndSize]))
 /* Only for fields appended after the first release */
 #define LC_HAS(s, f) (_lcOff[lcOff_##s##f] >= 0)
+/* The host's carry cap (8 until a host registers): the column stride of
+   ind->linCmtCarryT and the bound on its pair index */
+#define LC_CARRY_CAP_UNSET 8
+#define LC_CARRY_CAP ((int)(_lcOff[lcOffCarryMax] > 0 ? _lcOff[lcOffCarryMax] : LC_CARRY_CAP_UNSET))
 
 /* Host functions; each starts at a local fallback, never NULL */
 #define LC_FT_(n, r, a) typedef r (*lcHostFn_##n) a;

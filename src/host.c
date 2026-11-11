@@ -1,7 +1,8 @@
 /*
  * Receiver for rxode2's host table (inst/include/rxode2lincmtHost.h).
  *
- * Copies with bounds limits only -- no type, name, length or version checks.
+ * Copies with bounds limits only -- no type, name, length or version checks;
+ * only a carry cap past RXLC_CARRY_MAXPAIRS is refused.
  * Before rxode2 registers, every offset is -1 and every host function is a
  * local fallback, so standalone use never dereferences NULL.
  */
@@ -48,6 +49,19 @@ SEXP _rxode2lincmt_iniHost(SEXP p) {
     SEXP o = VECTOR_ELT(p, 0);
     int no = (int)Rf_length(o);
     int *po = INTEGER(o);
+    // The carry kernels index ind->linCmtCarryT with the host's cap; a host
+    // with more columns than RXLC_CARRY_MAXPAIRS would overrun the scratch
+    // they are sized for, and one with none has no array to index, so both
+    // are refused before anything is copied.  -1 is the unregistered value
+    // every offset starts at (the tests restore it).
+    if (no > lcOffCarryMax && po[lcOffCarryMax] > RXLC_CARRY_MAXPAIRS) {
+      Rf_error("rxode2 has %d linCmt() carry columns, but this rxode2lincmt supports at most %d; update rxode2lincmt",
+               po[lcOffCarryMax], RXLC_CARRY_MAXPAIRS);
+    }
+    if (no > lcOffCarryMax && po[lcOffCarryMax] < 1 && po[lcOffCarryMax] != -1) {
+      Rf_error("rxode2 reports %d linCmt() carry columns; it needs at least 1",
+               po[lcOffCarryMax]);
+    }
     for (int k = 0; k < no && k < lcOffN; ++k) {
       _lcOff[k] = (ptrdiff_t) po[k];
     }

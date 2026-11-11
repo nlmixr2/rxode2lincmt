@@ -14,7 +14,9 @@
 }
 \description{
 rxode2 calls this from its \code{.onLoad()} with the struct offsets and host
-functions described in \code{inst/include/rxode2lincmtHost.h}.  Nothing is
-validated; values are copied with bounds limits only.
+functions described in \code{inst/include/rxode2lincmtHost.h}.  Values are
+copied with bounds limits only; a host with no \code{linCmt()} carry columns,
+or with more than this package supports (see \code{.linCmtCarryMaxPairs()}),
+is an error.
 }
 \keyword{internal}
