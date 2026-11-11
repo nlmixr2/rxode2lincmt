@@ -65,6 +65,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// linCmtValueCacheCheck
+List linCmtValueCacheCheck(NumericVector dt, NumericMatrix par, int ncmt, int oral0, int trans, NumericVector alast0, NumericVector rate);
+RcppExport SEXP _rxode2lincmt_linCmtValueCacheCheck(SEXP dtSEXP, SEXP parSEXP, SEXP ncmtSEXP, SEXP oral0SEXP, SEXP transSEXP, SEXP alast0SEXP, SEXP rateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type par(parSEXP);
+    Rcpp::traits::input_parameter< int >::type ncmt(ncmtSEXP);
+    Rcpp::traits::input_parameter< int >::type oral0(oral0SEXP);
+    Rcpp::traits::input_parameter< int >::type trans(transSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type alast0(alast0SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type rate(rateSEXP);
+    rcpp_result_gen = Rcpp::wrap(linCmtValueCacheCheck(dt, par, ncmt, oral0, trans, alast0, rate));
+    return rcpp_result_gen;
+END_RCPP
+}
 // linCmtCarrySetFast
 LogicalVector linCmtCarrySetFast(bool enable);
 RcppExport SEXP _rxode2lincmt_linCmtCarrySetFast(SEXP enableSEXP) {
