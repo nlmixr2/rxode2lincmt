@@ -2860,6 +2860,8 @@ static inline bool linCmtBcarryPre(rx_solving_options_ind *ind, rx_solving_optio
                                    int idx, int m, const double *thNow, double _t) {
   // mode 3: linCmtCarryLiveTest()'s hand drive, whose idx is no record
   bool records = IND(ind, linCmtCarryVarying) != 3;
+#pragma omp atomic
+  linCmtCarryAdvCallsN++;
   if (records && idx >= 0 && getEvid(ind, IND(ind, ix)[idx]) == 3) {
     for (int k = 0; k < 4*RX_LINCMT_CARRY_MAXPAIRS; ++k) {
       IND(ind, linCmtCarryT)[k] = 0.0;
@@ -2868,8 +2870,6 @@ static inline bool linCmtBcarryPre(rx_solving_options_ind *ind, rx_solving_optio
     return true;
   }
   if (records) linCmtBcarryEvent(ind, op, idx, m);
-#pragma omp atomic
-  linCmtCarryAdvCallsN++;
   return linCmtBcarryFast(ind, thNow, _t);
 }
 

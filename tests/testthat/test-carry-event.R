@@ -11,12 +11,30 @@
 }
 
 # The probe's carry after each row, as an n x m x npair array
-.carryProbe <- function(evid, dose, theta, M, add, ncmt, oral0, mask = 0L,
-                        linOffset = 0L, fast = FALSE) {
+.carryProbe <- function(
+  evid,
+  dose,
+  theta,
+  M,
+  add,
+  ncmt,
+  oral0,
+  mask = 0L,
+  linOffset = 0L,
+  fast = FALSE
+) {
   .r <- .Call(
-    `_rxode2lincmt_carryEventProbe`, as.integer(evid), as.double(dose), theta,
-    M, add, as.integer(ncmt), as.integer(oral0), as.integer(mask),
-    as.integer(linOffset), fast
+    `_rxode2lincmt_carryEventProbe`,
+    as.integer(evid),
+    as.double(dose),
+    theta,
+    M,
+    add,
+    as.integer(ncmt),
+    as.integer(oral0),
+    as.integer(mask),
+    as.integer(linOffset),
+    fast
   )
   array(.r, dim(add))
 }
@@ -28,8 +46,16 @@
 # fast path; then M_i multiplies the carry unless the fast path skips the
 # row (the first row, and every row while theta is unchanged); then the
 # row's adds.
-.carryRef <- function(evid, dose, theta, M, add, mask = 0L, linOffset = 0L,
-                      fast = FALSE) {
+.carryRef <- function(
+  evid,
+  dose,
+  theta,
+  M,
+  add,
+  mask = 0L,
+  linOffset = 0L,
+  fast = FALSE
+) {
   .n <- length(evid)
   .m <- dim(add)[2]
   .np <- dim(add)[3]
@@ -63,7 +89,7 @@
       } else if (fast && .varying == 1L) {
         if (identical(.prev, theta[.i, ])) .skip <- TRUE else .varying <- 2L
       }
-      if (!.skip) .s <- matrix(M[, , .i], .m, .m) %*% .s
+      if (!.skip) .s <- matrix(M[,, .i], .m, .m) %*% .s
     }
     .s <- .s + matrix(add[.i, , ], .m, .np)
     .out[.i, , ] <- .s
@@ -80,19 +106,49 @@
   .evid <- c(.evid, rep(0L, n - length(.evid)))
   .dose <- c(.dose, rep(0, n - length(.dose)))
   .theta <- matrix(rep(c(1, 10, 0.5, 0, 0, 0, 1.1), each = n), n, 7)
-  if (!is.na(thetaStep)) .theta[thetaStep:n, 1] <- 1.2
+  if (!is.na(thetaStep)) {
+    .theta[thetaStep:n, 1] <- 1.2
+  }
   list(
-    evid = .evid, dose = .dose, theta = .theta,
+    evid = .evid,
+    dose = .dose,
+    theta = .theta,
     M = array(runif(m * m * n, 0.1, 0.9), c(m, m, n)),
     add = array(runif(n * m * np, -1, 1), c(n, m, np))
   )
 }
 
 # max |probe - reference| for one case
-.carryErr <- function(cs, ncmt, oral0, mask = 0L, linOffset = 0L, fast = FALSE) {
-  .p <- .carryProbe(cs$evid, cs$dose, cs$theta, cs$M, cs$add, ncmt, oral0,
-                    mask, linOffset, fast)
-  .r <- .carryRef(cs$evid, cs$dose, cs$theta, cs$M, cs$add, mask, linOffset, fast)
+.carryErr <- function(
+  cs,
+  ncmt,
+  oral0,
+  mask = 0L,
+  linOffset = 0L,
+  fast = FALSE
+) {
+  .p <- .carryProbe(
+    cs$evid,
+    cs$dose,
+    cs$theta,
+    cs$M,
+    cs$add,
+    ncmt,
+    oral0,
+    mask,
+    linOffset,
+    fast
+  )
+  .r <- .carryRef(
+    cs$evid,
+    cs$dose,
+    cs$theta,
+    cs$M,
+    cs$add,
+    mask,
+    linOffset,
+    fast
+  )
   max(abs(.p - .r))
 }
 
@@ -102,17 +158,33 @@
 # of 1 on every row, theta constant
 .carryRun1 <- function(evid, dose, fast = FALSE, mask = 0L) {
   .th <- matrix(rep(c(1, 10, 0, 0, 0, 0, 0), each = 6L), 6L, 7)
-  as.vector(.carryProbe(evid, dose, .th, array(0.5, c(1, 1, 6L)),
-                        array(1, c(6L, 1, 1)), 1L, 0L, mask, 0L, fast))
+  as.vector(.carryProbe(
+    evid,
+    dose,
+    .th,
+    array(0.5, c(1, 1, 6L)),
+    array(1, c(6L, 1, 1)),
+    1L,
+    0L,
+    mask,
+    0L,
+    fast
+  ))
 }
 
 test_that("a replace, multiply or reset gives the hand-computed carry", {
   .n <- 6L
   .ev <- c(101L, 0L, 0L, 0L, 0L, 0L)
-  expect_equal(.carryRun1(.ev, rep(0, .n)), c(1, 1.5, 1.75, 1.875, 1.9375, 1.96875))
+  expect_equal(
+    .carryRun1(.ev, rep(0, .n)),
+    c(1, 1.5, 1.75, 1.875, 1.9375, 1.96875)
+  )
   # a replace at row 3 zeroes the carry before row 4's advance
   .ev[3] <- .carryEvid(4L, 0L)
-  expect_equal(.carryRun1(.ev, c(100, 0, 50, 0, 0, 0)), c(1, 1.5, 1.75, 1, 1.5, 1.75))
+  expect_equal(
+    .carryRun1(.ev, c(100, 0, 50, 0, 0, 0)),
+    c(1, 1.5, 1.75, 1, 1.5, 1.75)
+  )
   # a multiply by 2, on the fast path: rows 1-3 skip M; the event takes the
   # subject to the slow path at row 4
   .ev[3] <- .carryEvid(5L, 0L)
@@ -122,7 +194,10 @@ test_that("a replace, multiply or reset gives the hand-computed carry", {
   # fast path goes on
   expect_equal(.carryRun1(.ev, .d, fast = TRUE, mask = 1L), c(1, 2, 3, 4, 5, 6))
   # a multiply by 0 clears the carry like a replace
-  expect_equal(.carryRun1(.ev, c(100, 0, 0, 0, 0, 0)), c(1, 1.5, 1.75, 1, 1.5, 1.75))
+  expect_equal(
+    .carryRun1(.ev, c(100, 0, 0, 0, 0, 0)),
+    c(1, 1.5, 1.75, 1, 1.5, 1.75)
+  )
   # a reset at row 3 zeroes the carry on its own row
   .ev[3] <- 3L
   expect_equal(.carryRun1(.ev, rep(0, .n)), c(1, 1.5, 1, 1.5, 1.75, 1.875))
@@ -149,8 +224,11 @@ test_that("replace and multiply follow the reference for every shape and compart
         for (.k in seq_along(.evs)) {
           for (.fast in c(FALSE, TRUE)) {
             .cs <- .carryCase(.evs[[.k]], .m, .np)
-            expect_lt(.carryErr(.cs, .sh[1], .sh[2], fast = .fast), 1e-12,
-                      label = paste(.sh[1], .sh[2], .np, .c, .k, .fast))
+            expect_lt(
+              .carryErr(.cs, .sh[1], .sh[2], fast = .fast),
+              1e-12,
+              label = paste(.sh[1], .sh[2], .np, .c, .k, .fast)
+            )
           }
         }
       }
@@ -170,8 +248,26 @@ test_that("the fast path leaves at a theta change or an event, whichever is firs
   .cs <- .carryCase(.ev, 2L, 1L)
   .noEv <- .cs
   .noEv$evid[4] <- 0L
-  .p <- .carryProbe(.cs$evid, .cs$dose, .cs$theta, .cs$M, .cs$add, 1L, 1L, fast = TRUE)
-  .p0 <- .carryProbe(.noEv$evid, .noEv$dose, .noEv$theta, .noEv$M, .noEv$add, 1L, 1L, fast = TRUE)
+  .p <- .carryProbe(
+    .cs$evid,
+    .cs$dose,
+    .cs$theta,
+    .cs$M,
+    .cs$add,
+    1L,
+    1L,
+    fast = TRUE
+  )
+  .p0 <- .carryProbe(
+    .noEv$evid,
+    .noEv$dose,
+    .noEv$theta,
+    .noEv$M,
+    .noEv$add,
+    1L,
+    1L,
+    fast = TRUE
+  )
   expect_identical(.p[1:4, , ], .p0[1:4, , ])
   expect_false(isTRUE(all.equal(.p[5, , ], .p0[5, , ])))
 })
@@ -182,8 +278,11 @@ test_that("the f() mask and the block offset select the compartment", {
     for (.mask in 0:3) {
       .cs <- .carryCase(.carryEv(.carryEvid(5L, .c), 0.5), 2L, 2L)
       for (.fast in c(FALSE, TRUE)) {
-        expect_lt(.carryErr(.cs, 1L, 1L, mask = .mask, fast = .fast), 1e-12,
-                  label = paste(.c, .mask, .fast))
+        expect_lt(
+          .carryErr(.cs, 1L, 1L, mask = .mask, fast = .fast),
+          1e-12,
+          label = paste(.c, .mask, .fast)
+        )
       }
     }
   }
@@ -194,9 +293,26 @@ test_that("the f() mask and the block offset select the compartment", {
     expect_lt(.carryErr(.cs, 1L, 1L, linOffset = 1L), 1e-12, label = .c)
   }
   .cs <- .carryCase(.carryEv(.carryEvid(4L, 0L), 10), 2L, 1L)
-  .p <- .carryProbe(.cs$evid, .cs$dose, .cs$theta, .cs$M, .cs$add, 1L, 1L, linOffset = 1L)
-  .noEv <- .carryProbe(c(.cs$evid[1:3], 0L, .cs$evid[-(1:4)]), .cs$dose, .cs$theta,
-                       .cs$M, .cs$add, 1L, 1L, linOffset = 1L)
+  .p <- .carryProbe(
+    .cs$evid,
+    .cs$dose,
+    .cs$theta,
+    .cs$M,
+    .cs$add,
+    1L,
+    1L,
+    linOffset = 1L
+  )
+  .noEv <- .carryProbe(
+    c(.cs$evid[1:3], 0L, .cs$evid[-(1:4)]),
+    .cs$dose,
+    .cs$theta,
+    .cs$M,
+    .cs$add,
+    1L,
+    1L,
+    linOffset = 1L
+  )
   expect_identical(.p, .noEv)
 })
 
@@ -204,11 +320,46 @@ test_that("the probe restores the offsets and the fast-path switch", {
   .off <- .rxode2lincmtHostInfo()$offsets
   .fast <- .linCmtCarrySetFast(TRUE)
   .cs <- .carryCase(.carryEv(.carryEvid(4L, 0L), 10), 1L, 1L)
-  .carryProbe(.cs$evid, .cs$dose, .cs$theta, .cs$M, .cs$add, 1L, 0L, fast = FALSE)
+  .carryProbe(
+    .cs$evid,
+    .cs$dose,
+    .cs$theta,
+    .cs$M,
+    .cs$add,
+    1L,
+    0L,
+    fast = FALSE
+  )
   expect_identical(.rxode2lincmtHostInfo()$offsets, .off)
   expect_true(.linCmtCarrySetFast(.fast))
-  expect_error(.carryProbe(1L, c(1, 2), matrix(0, 1, 7), array(1, c(1, 1, 1)),
-                           array(1, c(1, 1, 1)), 1L, 0L), "inconsistent")
-  expect_error(.carryProbe(1L, 1, matrix(0, 1, 7), array(1, c(1, 1, 1)),
-                           array(1, c(1, 1, 1)), 4L, 0L), "inconsistent")
+  expect_error(
+    .carryProbe(
+      1L,
+      c(1, 2),
+      matrix(0, 1, 7),
+      array(1, c(1, 1, 1)),
+      array(1, c(1, 1, 1)),
+      1L,
+      0L
+    ),
+    "inconsistent"
+  )
+  expect_error(
+    .carryProbe(
+      1L,
+      1,
+      matrix(0, 1, 7),
+      array(1, c(1, 1, 1)),
+      array(1, c(1, 1, 1)),
+      4L,
+      0L
+    ),
+    "inconsistent"
+  )
+})
+
+test_that("advCalls counts every -5 advance, a reset row's included", {
+  .linCmtCarryFastStats(TRUE)
+  .carryRun1(c(101L, 0L, 3L, 0L, 0L, 0L), rep(0, 6L))
+  expect_equal(.linCmtCarryFastStats(TRUE)[["advCalls"]], 6)
 })
