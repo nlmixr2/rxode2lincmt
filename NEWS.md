@@ -10,6 +10,21 @@
 
 ## Bug fixes
 
+- The `linCmt()` sensitivity carry, which 'nlmixr2est' uses for the FOCEi
+  gradient of a `linCmt()` parameter with a time-varying covariate, now
+  restarts at a reset (EVID 3, and the reset an EVID 4 begins with).  The
+  reset zeroes the compartments, but the carried sensitivities and their
+  trackers kept their values from before it, so such a fit with a reset
+  was off the same model written as ODEs (0.063 in the objective with an
+  EVID 4 under nocb).  A replace (EVID 5) or multiply (EVID 6) record, from
+  the data or pushed by `evid_()`, now zeroes or scales the replaced
+  compartment's carried sensitivities, which used to keep their values.
+  The carried gradient after such a record is exact only together with
+  `linCmtEventJac()`, which makes this package's own Jacobian follow the
+  event; without it, it is no worse than before.  With `f()` or `alag()`
+  modeled on the compartment the carry does not know a multiply's factor
+  and leaves that compartment's sensitivities as before.
+
 - The last-row value memo of `linCmt()` never hit inside an 'nlmixr2est' fit,
   because 'nlmixr2est' leaves the finite-difference step NaN and NaN never
   equals itself; every repeated call the model makes for a row recomputed
