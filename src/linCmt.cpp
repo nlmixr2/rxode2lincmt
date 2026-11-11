@@ -1806,6 +1806,62 @@ RObject linCmtModelDouble(double dt,
   return retList;
 }
 
+//' Value-path constant cache against the uncached kernel (test hook)
+//'
+//' Steps one kernel object through the rows of `par` with the theta-keyed
+//' constant cache linCmtA() uses, and another through the uncached
+//' evaluation, both from `alast0` with infusion `rate`.
+//'
+//' @param dt row time steps
+//' @param par numeric matrix, one row of (p1, v1, p2, p3, p4, p5, ka) per
+//'   step
+//' @param ncmt number of compartments
+//' @param oral0 1 for a depot, else 0
+//' @param trans parameterization code
+//' @param alast0 starting amounts
+//' @param rate infusion rates
+//' @return list with `cached` and `direct`, the amounts after each step
+//'   (one row per step)
+//' @keywords internal
+//' @export
+// [[Rcpp::export(.linCmtValueCacheCheck)]]
+List linCmtValueCacheCheck(NumericVector dt, NumericMatrix par,
+                           int ncmt, int oral0, int trans,
+                           NumericVector alast0, NumericVector rate) {
+  int m = ncmt + oral0;
+  if (alast0.size() != m) Rcpp::stop("alast0 size needs to be %d", m);
+  if (par.ncol() != 7 || par.nrow() != dt.size()) {
+    Rcpp::stop("par needs 7 columns and one row per dt");
+  }
+  stan::math::linCmtStan lcC(ncmt, oral0, trans, false, linCmtNormal, 0);
+  stan::math::linCmtStan lcD(ncmt, oral0, trans, false, linCmtNormal, 0);
+  int nRate = lcC.getNrate();
+  if (rate.size() != nRate) Rcpp::stop("rate size needs to be %d", nRate);
+  std::vector<double> aC(alast0.begin(), alast0.end()), aD = aC, sC(m), sD(m);
+  std::vector<double> r(rate.begin(), rate.end());
+  lcC.setPtr(aC.data(), r.data(), sC.data());
+  lcD.setPtr(aD.data(), r.data(), sD.data());
+  Eigen::Matrix<double, Eigen::Dynamic, 1> theta(lcC.getNpars()), fx;
+  Eigen::Matrix<double, Eigen::Dynamic, 1> yp(m);
+  Eigen::Matrix<double, Eigen::Dynamic, 2> g(ncmt, 2);
+  NumericMatrix outC(dt.size(), m), outD(dt.size(), m);
+  for (int i = 0; i < dt.size(); i++) {
+    linCmtFillTheta(theta, ncmt, oral0, par(i, 0), par(i, 1), par(i, 2),
+                    par(i, 3), par(i, 4), par(i, 5), par(i, 6));
+    lcC.setDt(dt[i]);
+    lcC.linAcalcAlastVal(theta);
+    lcC.evalValTo(theta, fx);
+    lcD.setDt(dt[i]);
+    lcD.linAcalcAlast(yp, g, theta);
+    Eigen::Matrix<double, Eigen::Dynamic, 1> fxD = lcD(theta);
+    for (int j = 0; j < m; j++) {
+      outC(i, j) = aC[j] = sC[j];
+      outD(i, j) = aD[j] = fxD(j, 0);
+    }
+  }
+  return List::create(_["cached"] = outC, _["direct"] = outD);
+}
+
 // Phase 3b.4 runtime fast-path state for the which1=-5 carry advance (see
 // the -5 branch in linCmtB below).  The enable flag is set from the R main
 // thread only (test/benchmark toggle; default on); the counters are
@@ -2153,9 +2209,8 @@ static LINCMT_NOINLINE double linCmtAbody(linA_t &lca, rx_solve *rx,
       }
       lc.setDt(dt);
 
-      lc.linAcalcAlast(yp, lca.gg, theta);
-
-      lc.evalTo(theta, fx);
+      lc.linAcalcAlastVal(theta);
+      lc.evalValTo(theta, fx);
     }
     return lc.adjustF(fx, theta, IND(ind, linCmtHV));
   } else if (which >= 0 && which < nAlast) {

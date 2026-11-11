@@ -81,6 +81,28 @@ linCmtModelDouble <- function(dt, p1, v1, p2, p3, p4, p5, ka, alastNV, rateNV, n
     .Call(`_rxode2lincmt_linCmtModelDouble`, dt, p1, v1, p2, p3, p4, p5, ka, alastNV, rateNV, ncmt, oral0, trans, deriv, type, tau, tinf, amt, bolusCmt, ndiff, sensType, sensH)
 }
 
+#' Value-path constant cache against the uncached kernel (test hook)
+#'
+#' Steps one kernel object through the rows of `par` with the theta-keyed
+#' constant cache linCmtA() uses, and another through the uncached
+#' evaluation, both from `alast0` with infusion `rate`.
+#'
+#' @param dt row time steps
+#' @param par numeric matrix, one row of (p1, v1, p2, p3, p4, p5, ka) per
+#'   step
+#' @param ncmt number of compartments
+#' @param oral0 1 for a depot, else 0
+#' @param trans parameterization code
+#' @param alast0 starting amounts
+#' @param rate infusion rates
+#' @return list with `cached` and `direct`, the amounts after each step
+#'   (one row per step)
+#' @keywords internal
+#' @export
+.linCmtValueCacheCheck <- function(dt, par, ncmt, oral0, trans, alast0, rate) {
+    .Call(`_rxode2lincmt_linCmtValueCacheCheck`, dt, par, ncmt, oral0, trans, alast0, rate)
+}
+
 #' Toggle the linCmt() carry-advance runtime fast path (test/benchmark hook)
 #'
 #' @param enable logical; new state

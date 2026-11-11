@@ -6,6 +6,7 @@
 #include "linCmtDualN.h"
 #include "linCmtDiffConstant.h"
 #include "lcHost.h"
+#include <cstring>
 // This StanHeaders' <stan/math.hpp> (pulled in by macros2micros.h) only
 // includes the reverse-mode library, so forward-mode AD (stan::math::fvar,
 // used by linCmtFwdJac) must be requested explicitly, after the reverse-mode
@@ -148,6 +149,14 @@ namespace stan {
       Eigen::Matrix<stan::math::dualN<RX_LINCMT_DUAL_MAX>, Eigen::Dynamic, 2> dualG_;
 
       double c1_, c2_;
+      // Value-path (linCmtA) constant cache: the micro-constants g_ and the
+      // 2/3-cmt eigen-decomposition for the theta in valTheta_ (bitwise),
+      // so a row under an unchanged theta only evaluates the dt tail.
+      bool valOk_ = false;
+      int valN_ = 0;
+      double valTheta_[7];
+      stan::math::solComp2struct<double> valSol2_;
+      stan::math::solComp3struct<double> valSol3_;
 
       //' The initialization of this class
       //'
@@ -252,6 +261,7 @@ namespace stan {
       void setModelType(const int ncmt, const int oral0, const int trans, const int type,
                         const int numDiff) {
         // The cached variables need to expire
+        valOk_ = false;
         ncmt_ = ncmt;
         oral0_ = oral0;
         trans_ = trans;
@@ -2380,6 +2390,33 @@ namespace stan {
         for (int i = oral0_ + ncmt_; i--;) yp_(i, 0) = A_[i];
         g_.resize(ncmt_, 2);
         stan::math::macros2microsInplace(theta, ncmt_, trans_, g_);
+        valOk_ = false;
+      }
+
+      // linAcalcAlast() for the value path: g_ and the eigen-decomposition
+      // are recomputed only when theta changes bit for bit (or the model is
+      // reshaped); a hit is exactly what recomputing would give.
+      void linAcalcAlastVal(const Eigen::Matrix<double, Eigen::Dynamic, 1>& theta) {
+        yp_.resize(ncmt_ + oral0_);
+        for (int i = oral0_ + ncmt_; i--;) yp_(i, 0) = A_[i];
+        int n = (int)theta.size();
+        if (valOk_ && valN_ == n &&
+            memcmp(valTheta_, theta.data(), n*sizeof(double)) == 0) {
+          return;
+        }
+        g_.resize(ncmt_, 2);
+        stan::math::macros2microsInplace(theta, ncmt_, trans_, g_);
+        if (ncmt_ == 2) {
+          valSol2_ = stan::math::computeSolComp2(g_(0, 1), g_(1, 0), g_(1, 1));
+        } else if (ncmt_ == 3) {
+          valSol3_ = stan::math::computeSolComp3(g_(0, 1), g_(1, 0), g_(1, 1),
+                                                 g_(2, 0), g_(2, 1));
+        }
+        valOk_ = n <= 7;
+        if (valOk_) {
+          valN_ = n;
+          memcpy(valTheta_, theta.data(), n*sizeof(double));
+        }
       }
 
       // For stan Jacobian to work the class needs to take 1 argument
@@ -2662,6 +2699,27 @@ namespace stan {
           } else if (ncmt_ == 3) {
             linCmtStan3ssBolus(g, ka, ret0);
           }
+        }
+      }
+
+      // evalTo() after linAcalcAlastVal(): the ordinary (non steady-state)
+      // 2/3-cmt row takes the cached eigen-decomposition straight to the
+      // tail, which is what linCmtStan2()/linCmtStan3() compute.
+      void evalValTo(const Eigen::Matrix<double, Eigen::Dynamic, 1>& theta,
+                     Eigen::Matrix<double, Eigen::Dynamic, 1>& fx) {
+        if (type_ != linCmtNormal || ncmt_ == 1) {
+          evalTo(theta, fx);
+          return;
+        }
+        double ka = oral0_ ? theta[ncmt_*2] : 0.0;
+        fx.resize(ncmt_ + oral0_);
+        if (ncmt_ == 2) {
+          linCmtStan2Tail<double>(valSol2_, yp_.data(), ka, fx.data());
+        } else {
+          linCmtStan3Tail<double>(valSol3_, yp_.data(), ka, fx.data());
+        }
+        for (int i = 0; i < ncmt_ + oral0_; i++) {
+          Asave_[i] = fx(i, 0);
         }
       }
 
