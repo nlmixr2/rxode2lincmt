@@ -87,7 +87,10 @@ out <- Sys.getenv("OUT", "saem-parity.rds")
 .simulate <- function(cs, d) {
   .p <- cs$par
   .e <- .etaNm(.p)
-  .eta <- matrix(rnorm(length(unique(d$ID)) * length(.e), 0, 0.3), ncol = length(.e))
+  .eta <- matrix(
+    rnorm(length(unique(d$ID)) * length(.e), 0, 0.3),
+    ncol = length(.e)
+  )
   colnames(.eta) <- paste0("e.", .e)
   .m <- rxode2(paste(
     c(
@@ -98,7 +101,13 @@ out <- Sys.getenv("OUT", "saem-parity.rds")
     ),
     collapse = "\n"
   ))
-  .s <- rxSolve(.m, as.data.frame(.eta), d, returnType = "data.frame", addDosing = FALSE)
+  .s <- rxSolve(
+    .m,
+    as.data.frame(.eta),
+    d,
+    returnType = "data.frame",
+    addDosing = FALSE
+  )
   d$DV[d$EVID == 0] <- .s$cp * (1 + rnorm(nrow(.s), 0, 0.1))
   list(data = d, sim = .s)
 }
@@ -182,11 +191,33 @@ if (mode == "parity") {
   .time <- list(
     "bolus-1cpt" = list(
       cs = list(par = c(cl = 4, v = 30), cmt = "central"),
-      d = .mkDat(120L, c(0.25, 0.5, 1:6, 8, 10, 12, 14, 16, 20, 24, 30, 36, 42, 48), 0, "central")
+      d = .mkDat(
+        120L,
+        c(0.25, 0.5, 1:6, 8, 10, 12, 14, 16, 20, 24, 30, 36, 42, 48),
+        0,
+        "central"
+      )
     ),
     "oral-2cpt" = list(
       cs = list(par = c(ka = 1.2, .p2), cmt = "depot"),
-      d = .mkDat(120L, sort(c(seq(0.5, 95.5, by = 2), 0.25, 0.75, 1.25, 1.75, 2.25, 2.75, 3.25, 3.75, 4.25, 4.75)), c(0, 24, 48, 72), "depot")
+      d = .mkDat(
+        120L,
+        sort(c(
+          seq(0.5, 95.5, by = 2),
+          0.25,
+          0.75,
+          1.25,
+          1.75,
+          2.25,
+          2.75,
+          3.25,
+          3.75,
+          4.25,
+          4.75
+        )),
+        c(0, 24, 48, 72),
+        "depot"
+      )
     )
   )
   for (.nm in names(.time)) {
