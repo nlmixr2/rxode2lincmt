@@ -12,7 +12,7 @@
   solves) return an already-solved row before any model setup.  Results are
   bitwise unchanged (#9).
 
-- `linCmt()` value-only solves no longer allocate on each solved row.
+- `linCmt()` value-only solves no longer allocate on each computed row.
   Results are bitwise unchanged (#9).
 
 ## Bug fixes
