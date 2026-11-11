@@ -6,9 +6,15 @@
   .alt <- c(4.5, 28, 7, 65, 2.5, 190, 0.9)
   .rows <- list(.base, .base, .base, .alt, .alt, .base, .alt, .base)
   .p <- do.call(rbind, .rows)
-  if (ncmt < 3) .p[, 5:6] <- 0
-  if (ncmt < 2) .p[, 3:4] <- 0
-  if (!oral0) .p[, 7] <- 0
+  if (ncmt < 3) {
+    .p[, 5:6] <- 0
+  }
+  if (ncmt < 2) {
+    .p[, 3:4] <- 0
+  }
+  if (!oral0) {
+    .p[, 7] <- 0
+  }
   .p
 }
 
@@ -36,9 +42,29 @@ test_that("value-path constant cache is bitwise identical to the kernel", {
 
 test_that("value-path constant cache follows the rate-constant parameterization", {
   .p <- matrix(
-    c(0.1, 20, 0.15, 0.075, 0, 0, 0,
-      0.1, 20, 0.15, 0.075, 0, 0, 0,
-      0.2, 20, 0.15, 0.075, 0, 0, 0),
+    c(
+      0.1,
+      20,
+      0.15,
+      0.075,
+      0,
+      0,
+      0,
+      0.1,
+      20,
+      0.15,
+      0.075,
+      0,
+      0,
+      0,
+      0.2,
+      20,
+      0.15,
+      0.075,
+      0,
+      0,
+      0
+    ),
     ncol = 7,
     byrow = TRUE
   )
@@ -47,6 +73,14 @@ test_that("value-path constant cache follows the rate-constant parameterization"
 })
 
 test_that("value-path constant cache rejects malformed input", {
-  expect_error(.linCmtValueCacheCheck(1, matrix(1, 1, 7), 1L, 0L, 1L, c(1, 2), 0))
+  expect_error(.linCmtValueCacheCheck(
+    1,
+    matrix(1, 1, 7),
+    1L,
+    0L,
+    1L,
+    c(1, 2),
+    0
+  ))
   expect_error(.linCmtValueCacheCheck(1, matrix(1, 1, 6), 1L, 0L, 1L, 1, 0))
 })
