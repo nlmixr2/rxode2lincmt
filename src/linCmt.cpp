@@ -1939,10 +1939,11 @@ NumericVector linCmtCarryLiveTest(int id, NumericVector t, NumericVector tPrior,
     // documented caller-supplied t/tPrior interval semantics.  Also pin the
     // slow path (mode 2): this harness's manual drive predates the 3b.4
     // constant-theta skip and its callers (the phase 2/3b.2 benches) assert
-    // the full M-advance semantics, constant theta included.
+    // the full M-advance semantics, constant theta included.  Mode 3 is mode
+    // 2 without the record lookups: idx here counts calls, not records.
     if (which1[i] == -5) {
       IND(ind, linCmtCarryTlast) = tPrior[i];
-      IND(ind, linCmtCarryVarying) = 2;
+      IND(ind, linCmtCarryVarying) = 3;
     }
     double p2i = which1[i] == -7 ? av[i] : theta(i, 2);
     out[i] = linCmtB(rx, id, t[i], 0, ncmt, oral0, which1[i], which2[i], trans,
@@ -2795,8 +2796,9 @@ static inline double linCmtBcarryAdd(rx_solving_options_ind *ind, int ncmt, int 
 // nlmixr2est's carry codegen emits (each pair's -7 add is G*(J_i - P) with
 // P the pair's tracker column, itself updated by a -7 add of J_i - P).  A
 // caller feeding -7 an arbitrary local contribution must pin the slow path
-// with linCmtCarrySetFast(FALSE) or set ind->linCmtCarryVarying = 2 (as
-// linCmtCarryLiveTest does).  Returns true when the advance was skipped.
+// with linCmtCarrySetFast(FALSE) or set ind->linCmtCarryVarying = 2
+// (linCmtCarryLiveTest sets 3, which is 2 without linCmtBcarryPre()'s
+// record lookups).  Returns true when the advance was skipped.
 static inline bool linCmtBcarryFast(rx_solving_options_ind *ind, const double *thNow,
                                     double _t) {
   if (!linCmtCarryFastEnabled) return false;
@@ -2809,7 +2811,7 @@ static inline bool linCmtBcarryFast(rx_solving_options_ind *ind, const double *t
     // permanently to the slow path for this pass.
     IND(ind, linCmtCarryVarying) = 2;
   }
-  if (IND(ind, linCmtCarryVarying) == 2) return false;
+  if (IND(ind, linCmtCarryVarying) >= 2) return false;
   IND(ind, linCmtCarryTlast) = _t;
 #pragma omp atomic
   linCmtCarryAdvFastN++;
@@ -2856,14 +2858,16 @@ static inline void linCmtBcarryEvent(rx_solving_options_ind *ind,
 // fast path may skip the advance.  Returns true when the row takes no M.
 static inline bool linCmtBcarryPre(rx_solving_options_ind *ind, rx_solving_options *op,
                                    int idx, int m, const double *thNow, double _t) {
-  if (idx >= 0 && getEvid(ind, IND(ind, ix)[idx]) == 3) {
+  // mode 3: linCmtCarryLiveTest()'s hand drive, whose idx is no record
+  bool records = IND(ind, linCmtCarryVarying) != 3;
+  if (records && idx >= 0 && getEvid(ind, IND(ind, ix)[idx]) == 3) {
     for (int k = 0; k < 4*RX_LINCMT_CARRY_MAXPAIRS; ++k) {
       IND(ind, linCmtCarryT)[k] = 0.0;
     }
     IND(ind, linCmtCarryTlast) = NAN;
     return true;
   }
-  linCmtBcarryEvent(ind, op, idx, m);
+  if (records) linCmtBcarryEvent(ind, op, idx, m);
 #pragma omp atomic
   linCmtCarryAdvCallsN++;
   return linCmtBcarryFast(ind, thNow, _t);
