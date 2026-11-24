@@ -1402,6 +1402,24 @@ static bool linCmtSeqTailJac(linB_t &lcb, linCmtBind &wsp, int phiCtl,
       w.npars != npars || memcmp(w.theta, thetaD, npars*sizeof(double)) != 0) {
     linCmtWinFill(lc, w, thetaD, ncmt, oral0, trans);
   }
+  if (ncmt >= 2) {
+    // The window's tails use the eigen-decomposition; in its bands (a
+    // near-double or near-zero disposition root, nlmixr2/rxode2lincmt#18)
+    // the full path takes the generator route instead.
+    double lmax = 0.0, lmin = HUGE_VAL;
+    for (int i = 0; i < ncmt; i++) {
+      if (!std::isfinite(w.L[i])) return false;
+      lmax = std::max(lmax, std::fabs(w.L[i]));
+      lmin = std::min(lmin, std::fabs(w.L[i]));
+    }
+    if (!(lmax > 0.0) || lmin < stan::math::linCmtStan::linCmtSmallRootRel*lmax) return false;
+    if (lc.dt_ > 0.0 && lmax*lc.dt_ < stan::math::linCmtStan::linCmtSlowStepRel) return false;
+    for (int i = 0; i < ncmt; i++) {
+      for (int j = i + 1; j < ncmt; j++) {
+        if (std::fabs(w.L[i] - w.L[j]) < stan::math::linCmtStan::linCmtEigBandRel*lmax) return false;
+      }
+    }
+  }
   // One delta-memo lookup per row; every requested direction reuses the
   // slot (the exponentials are shared, only the tangent differs by j).
   int memoOn = (linCmtDeltaMemoForce >= 0) ? linCmtDeltaMemoForce : w.deltaMemoOn;

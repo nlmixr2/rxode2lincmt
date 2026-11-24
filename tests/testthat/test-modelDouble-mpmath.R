@@ -1,12 +1,11 @@
 # linCmtModelDouble() (value and first derivatives) against a 60-digit
-# mpmath reference (fixtures/README.md), including the confluences of the
-# time-propagation solutions: an absorption rate equal or close to a
-# disposition rate, and a near-zero elimination over the step.  Their
-# quotients (E - Ea)/(ka - L) and (1 - E)/L are 0/0 at the confluence and
-# cancel near it.
-#
-# Not covered here (nlmixr2/rxode2lincmt#18): confluences of the steady-state
-# solutions and of the two and three compartment eigendecompositions.
+# mpmath reference (fixtures/README.md): every case, the confluences
+# included.  At a confluence the closed forms divide by differences of rates
+# -- ka and a disposition rate (time propagation and steady state), two
+# disposition rates (a near-double root), or every rate times a short step
+# (a slow system) -- which are 0/0 there and cancel near it.  The
+# propagation quotients are evaluated through a series inside their band;
+# the steady states and the eigen bands through the compartment generator.
 
 .mpmathCases <- function() {
   .ref <- readLines(test_path("fixtures", "closed_form_mpmath.txt"))
@@ -25,7 +24,9 @@
        ss = endsWith(kind, "ss"), inf = startsWith(kind, "inf"))
 }
 
-# value and gradient of the central concentration (single dose of 100 at 0)
+# value and gradient of the central concentration (dose of 100 at 0); the
+# steady-state bolus kernel returns the state at the dose, dose included, the
+# steady-state infusion kernel the trough at the infusion start
 .mpmathFirst <- function(cs) {
   sh <- .mpmathShape(cs$kind)
   m <- sh$ncmt + sh$oral0
@@ -33,32 +34,40 @@
   pp <- c(cs$p, rep(0, 7))
   ka <- if (sh$oral0) cs$p[n] else 0
   mask <- as.integer(c(6L, 30L, 126L)[sh$ncmt] + sh$oral0)
-  .step <- function(alast, dt, rate) {
+  .step <- function(alast, dt, rate, type = 0L, tau = 0, tinf = 0, amt = 0) {
     linCmtModelDouble(dt, pp[1], pp[2], if (sh$ncmt >= 2) pp[3] else 0,
                       if (sh$ncmt >= 2) pp[4] else 0, if (sh$ncmt >= 3) pp[5] else 0,
                       if (sh$ncmt >= 3) pp[6] else 0, ka, alast, rate,
-                      sh$ncmt, sh$oral0, 1L, TRUE, 0L, 0, 0, 0, 0L, mask, 3L)
+                      sh$ncmt, sh$oral0, 1L, TRUE, type, tau, tinf, amt, 0L, mask, 3L)
   }
   a0 <- rep(0, m + sh$ncmt * n + sh$oral0)
-  if (sh$inf) {
-    rt <- c(100 / cs$dur, rep(0, m - 1))
+  z <- rep(0, m)
+  rt <- z
+  if (sh$inf) rt[1] <- 100 / cs$dur
+  .infusion <- function(a) {
     if (cs$t <= cs$dur) {
-      return(.step(a0, cs$t, rt))
+      return(.step(a, cs$t, rt))
     }
-    r <- .step(a0, cs$dur, rt)
-    return(.step(r$Alast, cs$t - cs$dur, rep(0, m)))
+    .step(.step(a, cs$dur, rt)$Alast, cs$t - cs$dur, z)
+  }
+  if (sh$ss && !sh$inf) {
+    return(.step(.step(a0, 0, z, 3L, cs$ii, 0, 100)$Alast, cs$t, z))
+  }
+  if (sh$ss) {
+    return(.infusion(.step(a0, 0, rt, 2L, cs$ii, cs$dur)$Alast))
+  }
+  if (sh$inf) {
+    return(.infusion(a0))
   }
   a0[1] <- 100
-  .step(a0, cs$t, rep(0, m))
+  .step(a0, cs$t, z)
 }
 
 .relErr <- function(got, want) max(abs(got - want)) / max(abs(want))
 
-test_that("linCmtModelDouble is accurate at and near the propagation confluences", {
-  # the kinds whose only confluence is in the propagation tails
-  kinds <- c("oral1", "oral2", "oral3", "inf1", "bolus2")
-  cases <- Filter(function(cs) cs$kind %in% kinds, .mpmathCases())
-  expect_gte(length(cases), 80)
+test_that("linCmtModelDouble matches the 60-digit reference on every case, confluences included", {
+  cases <- .mpmathCases()
+  expect_equal(length(cases), 155)
   for (cs in cases) {
     r <- .mpmathFirst(cs)
     n <- length(cs$p)

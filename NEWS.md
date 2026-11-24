@@ -17,9 +17,17 @@
   or three compartment oral model) and loses digits to cancellation near it,
   more in each derivative; the gradient in `ka` was wrong at an exact one
   compartment confluence.  These quotients are now evaluated through a series
-  inside the affected band; results outside it are bitwise unchanged.  The
-  steady-state solutions and the eigendecompositions are not yet covered
-  (#18).
+  inside the affected band; results outside it are bitwise unchanged.
+- The steady-state solutions and the two and three compartment
+  eigendecompositions had the same problem at their own confluences: an
+  absorption rate at a disposition rate over a dosing interval (a `NaN`
+  steady state for an oral model), two nearly equal disposition rates, a
+  near-zero one next to a large one, and a slow system over a short step.
+  Inside those bands the step and the steady states are now computed from
+  the matrix exponential of the compartment generator (no differences of
+  rates); outside them the closed forms run unchanged (bitwise).  Every
+  case of a 60-digit reference now matches to 1e-10 in value and 1e-9 in
+  gradient (#18).
 - The `linCmt()` sensitivity carry, which 'nlmixr2est' uses for the FOCEi
   gradient of a `linCmt()` parameter with a time-varying covariate, now
   restarts at a reset (EVID 3, and the reset an EVID 4 begins with).  The
