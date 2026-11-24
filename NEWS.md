@@ -10,6 +10,16 @@
 
 ## Bug fixes
 
+- Near a confluence -- an absorption rate equal or close to a disposition
+  rate, or a near-zero elimination over the step -- the one to three
+  compartment solutions divided a difference of exponentials by a difference
+  of rates.  That is `0/0` at the confluence itself (a `NaN` amount for a two
+  or three compartment oral model) and loses digits to cancellation near it,
+  more in each derivative; the gradient in `ka` was wrong at an exact one
+  compartment confluence.  These quotients are now evaluated through a series
+  inside the affected band; results outside it are bitwise unchanged.  The
+  steady-state solutions and the eigendecompositions are not yet covered
+  (#18).
 - The `linCmt()` sensitivity carry, which 'nlmixr2est' uses for the FOCEi
   gradient of a `linCmt()` parameter with a time-varying covariate, now
   restarts at a reset (EVID 3, and the reset an EVID 4 begins with).  The

@@ -1078,6 +1078,48 @@ namespace stan {
       // preE, when non-NULL, supplies the delta-keyed memoized exponentials
       // (linCmt.cpp linCmtWinDeltaSlot): [exp(-k10*dt_), exp(-ka*dt_)] --
       // exact caching of the same values, never an approximation.
+      // ---- Confluence-safe quotients (rxode2lincmt#17) ----------------------
+      //
+      // The tails divide by a difference of rates: (E - Ea)/(ka - L) for the
+      // absorption and (1 - E)/L for the infusion.  Both are
+      //
+      //   (E - Ea)/(ka - L) = E dt phi((ka - L) dt),   (1 - E)/L = dt phi(L dt),
+      //
+      // phi(x) = (1 - exp(-x))/x, which is smooth through x = 0, where the
+      // quotients are 0/0 (ka == L: NaN) and, near it, lose every digit to
+      // cancellation -- worse in each derivative order (the gradient and the
+      // Hessian amplify it by 1/x and 1/x^2).  Inside |x| < linCmtPhiBand phi
+      // is its Taylor series (truncation ~ x^9/10!); outside, the quotient is
+      // the original expression, so those results are bitwise unchanged.
+      static constexpr double linCmtPhiBand = 1e-2;
+
+      template <typename T>
+      static inline bool linCmtInPhiBand(const T& x) {
+        return x < linCmtPhiBand && x > -linCmtPhiBand;
+      }
+
+      template <typename T>
+      static inline T linCmtPhi1(const T& x) {
+        return 1.0 + x*(-1.0/2.0 + x*(1.0/6.0 + x*(-1.0/24.0 + x*(1.0/120.0 +
+          x*(-1.0/720.0 + x*(1.0/5040.0 + x*(-1.0/40320.0 + x*(1.0/362880.0))))))));
+      }
+
+      // (E - Ea)/(ka - L), E = exp(-L dt), Ea = exp(-ka dt)
+      template <typename T>
+      inline T linCmtAbsQuot(const T& E, const T& Ea, const T& ka, const T& L) const {
+        T x = (ka - L) * dt_;
+        if (linCmtInPhiBand(x)) return E * dt_ * linCmtPhi1(x);
+        return (E - Ea) / (ka - L);
+      }
+
+      // (1 - E)/L, E = exp(-L dt)
+      template <typename T>
+      inline T linCmtInfQuot(const T& E, const T& L) const {
+        T x = L * dt_;
+        if (linCmtInPhiBand(x)) return dt_ * linCmtPhi1(x);
+        return (T(1.0) - E) / L; // as the original (o - E)./L, o a T vector of 1
+      }
+
       template <typename T>
       void linCmtStan1Tail(const T k10, const T* yp, T ka, T* ret,
                            const T* preE = NULL) const {
@@ -1096,15 +1138,20 @@ namespace stan {
           R += rate_[1];
           ret[0] = rate_[0] * (1.0 - Ea) / ka + yp[0] * Ea;
 
-          if (abs(ka10) <= sqrt(DBL_EPSILON)) {
-            ret[1] += (yp[0] * k10 - rate_[0]) * dt_ * E;
+          if (linCmtInPhiBand(ka10 * dt_)) {
+            // confluence-safe (E - Ea)/(ka - k10); see linCmtAbsQuot
+            ret[1] += (yp[0] * ka  - rate_[0]) * linCmtAbsQuot(E, Ea, ka, k10);
           } else {
             ret[1] += (yp[0] * ka  - rate_[0]) * (E - Ea) / ka10;
           }
         }
         // Handle the case with infusion
         if (abs(R) > sqrt(DBL_EPSILON)) {
-          ret[oral0_] += R * (1.0 - E) / k10;
+          if (linCmtInPhiBand(k10 * dt_)) {
+            ret[oral0_] += R * dt_ * linCmtPhi1(k10 * dt_); // = R (1 - E)/k10
+          } else {
+            ret[oral0_] += R * (1.0 - E) / k10;
+          }
         }
       }
 
@@ -1476,7 +1523,10 @@ namespace stan {
           R += rDepot;
           Eigen::Matrix<T, 2, 1> expa = Eigen::Matrix<T, 2, 1>::Constant(2, 1, preE ? preE[2] : exp(-ka*dt_));
           Eigen::Matrix<T, 2, 1> ka2 = Eigen::Matrix<T, 2, 1>::Constant(2, 1, ka);
-          Ea =  (E - expa).array()/(ka2 - sol2.L).array();
+          // confluence-safe (E - Ea)/(ka - L), elementwise (linCmtAbsQuot)
+          for (int i_ = 0; i_ < 2; ++i_) {
+            Ea(i_, 0) = linCmtAbsQuot(E(i_, 0), expa(i_, 0), ka2(i_, 0), sol2.L(i_, 0));
+          }
           T cf = ka*yp[0] - rDepot;
           Xo += (cf*sol2.C1)*Ea;
           ret[0] = yp[0]*expa(0, 0);
@@ -1486,8 +1536,8 @@ namespace stan {
         }
         if (R > 0.0) {
           // Xo = Xo + ((cR*Co[, , 1]) %*% ((1 - E)/L)) # Infusion
-          Eigen::Matrix<T, 2, 1> o2 = Eigen::Matrix<T, 2, 1>::Constant(2, 1, 1.0);
-          Rm = (o2 - E).array()/sol2.L.array();
+          // confluence-safe (1 - E)/L, elementwise (linCmtInfQuot)
+          for (int i_ = 0; i_ < 2; ++i_) Rm(i_, 0) = linCmtInfQuot(E(i_, 0), sol2.L(i_, 0));
           Xo += (R*sol2.C1)*Rm;
         }
         ret[oral0_]     = Xo(0, 0);
@@ -2108,15 +2158,18 @@ namespace stan {
           Eigen::Matrix<T, 3, 1> expa = Eigen::Matrix<T, 3, 1>::Constant(3, 1, preE ? preE[3] : exp(-ka*dt_));
           Eigen::Matrix<T, 3, 1> ka3 = Eigen::Matrix<T, 3, 1>::Constant(3, 1, ka);
 
-          Ea =  (E - expa).array()/(ka3 - sol3.L).array();
+          // confluence-safe (E - Ea)/(ka - L), elementwise (linCmtAbsQuot)
+          for (int i_ = 0; i_ < 3; ++i_) {
+            Ea(i_, 0) = linCmtAbsQuot(E(i_, 0), expa(i_, 0), ka3(i_, 0), sol3.L(i_, 0));
+          }
           T cf = ka*yp[0] - rDepot;
           Xo += (cf*sol3.C1)*Ea;
           ret[0] = rDepot*(1.0-expa(0, 0))/ka + yp[0]*expa(0, 0);
         }
         if (R > 0.0) {
           // Xo = Xo + ((cR*Co[, , 1]) %*% ((1 - E)/L)) # Infusion
-          Eigen::Matrix<T, 3, 1> o3 = Eigen::Matrix<T, 3, 1>::Constant(3, 1, 1.0);
-          Rm = (o3 - E).array()/sol3.L.array();
+          // confluence-safe (1 - E)/L, elementwise (linCmtInfQuot)
+          for (int i_ = 0; i_ < 3; ++i_) Rm(i_, 0) = linCmtInfQuot(E(i_, 0), sol3.L(i_, 0));
           Xo += (R*sol3.C1)*Rm;
         }
         ret[oral0_]     = Xo(0, 0);
