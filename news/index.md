@@ -32,6 +32,11 @@
   Results are bitwise unchanged
   ([\#9](https://github.com/nlmixr2/rxode2lincmt/issues/9)).
 
+- `linCmt()` value-only solves compute the micro-constants and the 2-
+  and 3-compartment eigen-decomposition once per parameter set instead
+  of on every row. Results are bitwise unchanged
+  ([\#9](https://github.com/nlmixr2/rxode2lincmt/issues/9)).
+
 ### Bug fixes
 
 - The `linCmt()` sensitivity carry, which ‘nlmixr2est’ uses for the
