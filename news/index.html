@@ -36,7 +36,13 @@
 <h2 class="pkg-version" data-toc-text="development version" id="rxode2lincmt-development-version">rxode2lincmt (development version)<a class="anchor" aria-label="anchor" href="#rxode2lincmt-development-version"></a></h2>
 <div class="section level3">
 <h3 id="new-features-development-version">New features<a class="anchor" aria-label="anchor" href="#new-features-development-version"></a></h3>
-<ul><li>The <code>linCmt()</code> sensitivity carry is read from rxode2’s solve buffer (<code>ind-&gt;solve</code>) when rxode2 sends its carry states (the new host-table rows <code>numLinCarry</code>, <code>linCmtCarryRow</code> and <code>n_all_times</code>), sized to each model, so it has no cap; <code><a href="../reference/dot-linCmtCarryMaxPairs.html">.linCmtCarryMaxPairs()</a></code> reports <code>.Machine$integer.max</code> then. With an rxode2 that does not send them the carry stays in the fixed 8-pair array, as before.</li>
+<ul><li><p>The <code>linCmt()</code> sensitivity carry is read from rxode2’s solve buffer (<code>ind-&gt;solve</code>) when rxode2 sends its carry states (the new host-table rows <code>numLinCarry</code>, <code>linCmtCarryRow</code> and <code>n_all_times</code>), sized to each model, so it has no cap; <code><a href="../reference/dot-linCmtCarryMaxPairs.html">.linCmtCarryMaxPairs()</a></code> reports <code>.Machine$integer.max</code> then. With an rxode2 that does not send them the carry stays in the fixed 8-pair array, as before.</p></li>
+<li><p>Internal test hook <code><a href="../reference/dot-linCmtHostSim.html">.linCmtHostSim()</a></code> solves a synthetic subject through <code>linCmtA()</code>/<code>linCmtB()</code> on stand-in solver structs, so the solver paths are tested without rxode2.</p></li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
+<ul><li><p><code><a href="../reference/linCmtModelDouble.html">linCmtModelDouble()</a></code> no longer crashes R with the finite-difference <code>sensType</code> values 1, 2, 10 and 20: it now computes the base value first, as <code>linCmtB()</code> does, and all four use the step <code>sensH</code>.</p></li>
+<li><p>The four-point forward difference that <code>linCmt()</code> finite-difference gradients fall back to with <code>linCmtForwardMax = 3</code> used the coefficient 6 instead of 2 on its last point, so a suspect gradient came out wrong. The default (<code>linCmtForwardMax = 2</code>) is unchanged.</p></li>
 </ul></div>
 </div>
     <div class="section level2">

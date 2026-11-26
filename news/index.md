@@ -12,6 +12,23 @@
   reports `.Machine$integer.max` then. With an rxode2 that does not send
   them the carry stays in the fixed 8-pair array, as before.
 
+- Internal test hook
+  [`.linCmtHostSim()`](https://nlmixr2.github.io/rxode2lincmt/reference/dot-linCmtHostSim.md)
+  solves a synthetic subject through `linCmtA()`/`linCmtB()` on stand-in
+  solver structs, so the solver paths are tested without rxode2.
+
+### Bug fixes
+
+- [`linCmtModelDouble()`](https://nlmixr2.github.io/rxode2lincmt/reference/linCmtModelDouble.md)
+  no longer crashes R with the finite-difference `sensType` values 1, 2,
+  10 and 20: it now computes the base value first, as `linCmtB()` does,
+  and all four use the step `sensH`.
+
+- The four-point forward difference that `linCmt()` finite-difference
+  gradients fall back to with `linCmtForwardMax = 3` used the
+  coefficient 6 instead of 2 on its last point, so a suspect gradient
+  came out wrong. The default (`linCmtForwardMax = 2`) is unchanged.
+
 ## rxode2lincmt 0.1.1
 
 ### New features

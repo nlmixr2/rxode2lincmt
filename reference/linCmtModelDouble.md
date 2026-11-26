@@ -104,13 +104,12 @@ linCmtModelDouble(
 
   derivative method: 3 or 30 forward-mode automatic differentiation, 32
   all directions in one forward-mode pass, 31 reverse mode, 100
-  automatic choice, 1 and 2 forward and central differences with the
-  kernel's own step, 10 and 20 forward and central differences with step
-  `sensH`
+  automatic choice, 1 or 10 forward and 2 or 20 central differences with
+  step `sensH`
 
 - sensH:
 
-  finite-difference step for `sensType` 10 and 20
+  finite-difference step for `sensType` 1, 2, 10 and 20
 
 ## Value
 
