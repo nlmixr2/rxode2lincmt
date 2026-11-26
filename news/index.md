@@ -19,6 +19,18 @@
 
 ### Bug fixes
 
+- The per-compartment dose-time and bioavailability sensitivities
+  (`linCmtB()` `which1 = -9` and `-10`) are no longer `NA` at a record
+  the solve does not advance: one at the same time as the record before
+  it, such as an observation at a dose time. Such a record had no
+  decomposition of its own; it now takes the last advanced record’s,
+  plus the doses given at that time. nlmixr2est’s FOCEi reads the `-10`
+  sensitivity at every observation, so a `linCmt()` model with an eta on
+  `f()` failed every subject that had a sample at a dose time, and its
+  fit returned a constant objective. At an infusion start the dose-time
+  read uses the started rate; a model tracking no origin still reads
+  `NA`.
+
 - [`linCmtModelDouble()`](https://nlmixr2.github.io/rxode2lincmt/reference/linCmtModelDouble.md)
   no longer crashes R with the finite-difference `sensType` values 1, 2,
   10 and 20: it now computes the base value first, as `linCmtB()` does,

@@ -41,7 +41,8 @@
 </ul></div>
 <div class="section level3">
 <h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
-<ul><li><p><code><a href="../reference/linCmtModelDouble.html">linCmtModelDouble()</a></code> no longer crashes R with the finite-difference <code>sensType</code> values 1, 2, 10 and 20: it now computes the base value first, as <code>linCmtB()</code> does, and all four use the step <code>sensH</code>.</p></li>
+<ul><li><p>The per-compartment dose-time and bioavailability sensitivities (<code>linCmtB()</code> <code>which1 = -9</code> and <code>-10</code>) are no longer <code>NA</code> at a record the solve does not advance: one at the same time as the record before it, such as an observation at a dose time. Such a record had no decomposition of its own; it now takes the last advanced record’s, plus the doses given at that time. nlmixr2est’s FOCEi reads the <code>-10</code> sensitivity at every observation, so a <code>linCmt()</code> model with an eta on <code>f()</code> failed every subject that had a sample at a dose time, and its fit returned a constant objective. At an infusion start the dose-time read uses the started rate; a model tracking no origin still reads <code>NA</code>.</p></li>
+<li><p><code><a href="../reference/linCmtModelDouble.html">linCmtModelDouble()</a></code> no longer crashes R with the finite-difference <code>sensType</code> values 1, 2, 10 and 20: it now computes the base value first, as <code>linCmtB()</code> does, and all four use the step <code>sensH</code>.</p></li>
 <li><p>The four-point forward difference that <code>linCmt()</code> finite-difference gradients fall back to with <code>linCmtForwardMax = 3</code> used the coefficient 6 instead of 2 on its last point, so a suspect gradient came out wrong. The default (<code>linCmtForwardMax = 2</code>) is unchanged.</p></li>
 </ul></div>
 </div>
