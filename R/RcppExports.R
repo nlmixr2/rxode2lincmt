@@ -125,6 +125,28 @@ linCmtModelDouble <- function(dt, p1, v1, p2, p3, p4, p5, ka, alastNV, rateNV, n
     .Call(`_rxode2lincmt_linCmtModelDouble`, dt, p1, v1, p2, p3, p4, p5, ka, alastNV, rateNV, ncmt, oral0, trans, deriv, type, tau, tinf, amt, bolusCmt, ndiff, sensType, sensH)
 }
 
+#' Advance a linear compartment model one step with exact Hessians
+#'
+#' Like [linCmtModelDouble()] with `deriv = TRUE`, but also carries and
+#' returns the Hessian of each amount, and of the central concentration,
+#' with respect to the full parameter vector `(p1, v1, ..., ka)`, by nested
+#' forward-mode automatic differentiation (rxode2lincmt#17).
+#'
+#' @inheritParams linCmtModelDouble
+#' @param alastH Hessians of the starting amounts: `m * n * n` values, one
+#'   column-major `n x n` block per amount (`m` amounts, `n` parameters)
+#' @param quadCarry logical; use the quadratic carry-forward of the starting
+#'   amounts.  `FALSE` uses the linear carry of the first-order path.
+#' @return list with `val` (central concentration), `Jg` (its gradient),
+#'   `Hc` (its `n x n` Hessian), `fx` (amounts after the step), `J`
+#'   (`m x n` Jacobian), `H` (`n x n x m` array of amount Hessians) and
+#'   `Alast` (carried state for the next call)
+#' @keywords internal
+#' @export
+linCmtModelHess <- function(dt, p1, v1, p2, p3, p4, p5, ka, alastNV, alastH, rateNV, ncmt, oral0, trans, type = 0L, tau = 0.0, tinf = 0.0, amt = 0.0, bolusCmt = 0L, ndiff = 0L, quadCarry = TRUE) {
+    .Call(`_rxode2lincmt_linCmtModelHess`, dt, p1, v1, p2, p3, p4, p5, ka, alastNV, alastH, rateNV, ncmt, oral0, trans, type, tau, tinf, amt, bolusCmt, ndiff, quadCarry)
+}
+
 #' Value-path constant cache against the uncached kernel (test hook)
 #'
 #' Steps one kernel object through the rows of `par` with the theta-keyed

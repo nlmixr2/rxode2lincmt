@@ -18,6 +18,7 @@
 #include <stan/math/fwd/core.hpp>
 #include <stan/math/fwd/meta.hpp>
 #include <stan/math/fwd/fun/value_of.hpp>
+#include <stan/math/fwd/fun/value_of_rec.hpp>
 #include <stan/math/fwd/fun/exp.hpp>
 #include <stan/math/fwd/fun/sqrt.hpp>
 #include <stan/math/fwd/fun/square.hpp>
@@ -2894,6 +2895,238 @@ namespace stan {
           thetaF(i, 0) = fv(thetaIn(i, 0), 0.0);  // reset tangent for next seed
         }
         for (int i = 0; i < m; i++) Asave_[i] = fx(i, 0);
+      }
+
+      // ---- Second-order (Hessian) sensitivities, rxode2lincmt#17 ----------
+      //
+      // One step evaluated on nested forward-mode AD, fvar<fvar<double>>,
+      // over the FULL theta (p1, v1, ..., ka).  On an ordinary step the
+      // carried state is rebuilt as a function of theta from the saved
+      // amounts A, their Jacobian J (A_, restoreJacTo layout) and their
+      // Hessians Hlast:
+      //
+      //   Alast_i(theta) = A_i + J_i d + 1/2 d' H_i d,   d = theta - theta0
+      //
+      // The first-order path (getAlastAD) carries only A + J d: exact for the
+      // gradient, zero curvature, so a nested evaluation of it is wrong from
+      // the second dose on.  quadCarry = false reproduces it (tests only).
+      // Steady-state steps are closed form in theta and use no carry.
+
+      // Central volume as a function of theta (templated getVc()).
+      template <typename T>
+      T getVcT(const Eigen::Matrix<T, Eigen::Dynamic, 1>& theta) const {
+        switch (ncmt_*100 + trans_) {
+        case 311: return 1.0/(1.0/theta(1) + theta(3) + theta(5));
+        case 211: return 1.0/(1.0/theta(1) + theta(3));
+        case 310: return 1.0/(theta(1) + theta(3) + theta(5));
+        case 210: return 1.0/(theta(1) + theta(3));
+        case 110: return 1.0/theta(1);
+        default:  return theta(1);
+        }
+      }
+
+      template <typename T>
+      void evalHessStep(const Eigen::Matrix<T, Eigen::Dynamic, 1>& th,
+                        const Eigen::Matrix<double, Eigen::Dynamic, 1>& th0,
+                        const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>& J,
+                        const double *Hlast, bool quadCarry,
+                        Eigen::Matrix<T, Eigen::Dynamic, 1>& ret) const {
+        int m = ncmt_ + oral0_;
+        int n = ncmt_*2 + oral0_;
+        Eigen::Matrix<T, Eigen::Dynamic, 2> g =
+          stan::math::macros2micros(th, ncmt_, trans_);
+        T ka = 0.0;
+        if (oral0_) ka = th[ncmt_*2];
+        ret.resize(m);
+        if (type_ == linCmtSsInf8) {
+          if (ncmt_ == 1) linCmtStan1ssInf8(g, ka, ret);
+          else if (ncmt_ == 2) linCmtStan2ssInf8(g, ka, ret);
+          else linCmtStan3ssInf8(g, ka, ret);
+          return;
+        } else if (type_ == linCmtSsInf) {
+          if (ncmt_ == 1) linCmtStan1ssInf(g, ka, ret);
+          else if (ncmt_ == 2) linCmtStan2ssInf(g, ka, ret);
+          else linCmtStan3ssInf(g, ka, ret);
+          return;
+        } else if (type_ == linCmtSsBolus) {
+          if (ncmt_ == 1) linCmtStan1ssBolus(g, ka, ret);
+          else if (ncmt_ == 2) linCmtStan2ssBolus(g, ka, ret);
+          else linCmtStan3ssBolus(g, ka, ret);
+          return;
+        }
+        Eigen::Matrix<T, Eigen::Dynamic, 1> d(n);
+        for (int k = 0; k < n; k++) d(k) = th(k) - th0(k);
+        Eigen::Matrix<T, Eigen::Dynamic, 1> yp(m);
+        for (int i = 0; i < m; i++) {
+          T a = A_[i];
+          for (int k = 0; k < n; k++) {
+            if (J(i, k) != 0.0) a += J(i, k)*d(k);
+          }
+          if (quadCarry && Hlast != NULL) {
+            const double *Hi = Hlast + (size_t)i*n*n;
+            T q = 0.0;
+            for (int k = 0; k < n; k++) {
+              for (int l = 0; l < n; l++) {
+                double h = Hi[k + l*n];
+                if (h != 0.0) q += h*d(k)*d(l);
+              }
+            }
+            a += 0.5*q;
+          }
+          yp(i) = a;
+        }
+        if (ncmt_ == 1) linCmtStan1<T>(g, yp, ka, ret);
+        else if (ncmt_ == 2) linCmtStan2<T>(g, yp, ka, ret);
+        else linCmtStan3<T>(g, yp, ka, ret);
+      }
+
+      // ---- eta-space second-order step (time-varying parameters) ----------
+      //
+      // One step on nested forward AD over random-effect directions, where
+      // each slot's parameter is this row's own quadratic in eta,
+      //
+      //   p_k(eta) = p_k + G_k . d + 1/2 d' GG_k d,
+      //
+      // and the prior amounts are the carried quadratic
+      //
+      //   A_i(eta) = A_i + S1_i . d + 1/2 d' S2_i d.
+      //
+      // Because the expansion is in eta, not in the PK parameters, it is exact
+      // when the parameters change between records (a time-varying covariate):
+      // each row brings its own p(eta).  nE directions, eMax the storage
+      // stride; G is 7 x eMax (slot-major), GG 7 x eMax x eMax, S1 m x eMax,
+      // S2 m x eMax x eMax.  Outputs the new S1/S2 and the concentration's
+      // gradient C1 (eMax) and Hessian C2 (eMax x eMax).
+      void linCmtEtaStep(const Eigen::Matrix<double, Eigen::Dynamic, 1>& p0,
+                         const double *A, int nE, int eMax,
+                         const double *G, const double *GG,
+                         const double *S1, const double *S2,
+                         double *S1out, double *S2out,
+                         double *C1, double *C2, double *val) const {
+        typedef stan::math::fvar<double> fv;
+        typedef stan::math::fvar<fv> fvv;
+        int m = ncmt_ + oral0_;
+        int n = ncmt_*2 + oral0_;
+        Eigen::Matrix<fvv, Eigen::Dynamic, 1> th(n), yp(m), ret(m);
+        std::vector<fvv> d(nE);
+        for (int a = 0; a < nE; a++) {
+          for (int b = a; b < nE; b++) {
+            for (int c = 0; c < nE; c++) {
+              d[c] = fvv(fv(0.0, c == a ? 1.0 : 0.0), fv(c == b ? 1.0 : 0.0, 0.0));
+            }
+            for (int k = 0; k < n; k++) {
+              fvv x = p0(k);
+              for (int c = 0; c < nE; c++) {
+                double g = G[k*eMax + c];
+                if (g != 0.0) x += g*d[c];
+                for (int e = 0; e < nE; e++) {
+                  double gg = GG[(k*eMax + c)*eMax + e];
+                  if (gg != 0.0) x += 0.5*gg*d[c]*d[e];
+                }
+              }
+              th(k) = x;
+            }
+            for (int i = 0; i < m; i++) {
+              fvv y = A[i];
+              for (int c = 0; c < nE; c++) {
+                double s1 = S1[i*eMax + c];
+                if (s1 != 0.0) y += s1*d[c];
+                for (int e = 0; e < nE; e++) {
+                  double s2 = S2[(i*eMax + c)*eMax + e];
+                  if (s2 != 0.0) y += 0.5*s2*d[c]*d[e];
+                }
+              }
+              yp(i) = y;
+            }
+            Eigen::Matrix<fvv, Eigen::Dynamic, 2> g =
+              stan::math::macros2micros(th, ncmt_, trans_);
+            fvv ka = 0.0;
+            if (oral0_) ka = th(ncmt_*2);
+            ret.resize(m);
+            if (ncmt_ == 1) linCmtStan1<fvv>(g, yp, ka, ret);
+            else if (ncmt_ == 2) linCmtStan2<fvv>(g, yp, ka, ret);
+            else linCmtStan3<fvv>(g, yp, ka, ret);
+            fvv cp = ret(oral0_) / getVcT<fvv>(th);
+            for (int i = 0; i < m; i++) {
+              if (a == b) S1out[i*eMax + a] = ret(i).val_.d_;
+              S2out[(i*eMax + a)*eMax + b] = ret(i).d_.d_;
+              S2out[(i*eMax + b)*eMax + a] = ret(i).d_.d_;
+            }
+            if (a == b) C1[a] = cp.val_.d_;
+            C2[a*eMax + b] = cp.d_.d_;
+            C2[b*eMax + a] = cp.d_.d_;
+            if (a == 0 && b == 0) *val = cp.val_.val_;
+          }
+        }
+      }
+
+      // Full-theta indices differentiated under the ndiff mask (0 = all).
+      int hessIndices(int *idxOut) const {
+        int nd = numDiff_ == 0 ? 127 : numDiff_;
+        static const int bits[6] = {diffP1, diffV1, diffP2, diffP3, diffP4, diffP5};
+        int c = 0;
+        for (int j = 0; j < 2*ncmt_; j++) {
+          if ((nd & bits[j]) != 0) idxOut[c++] = j;
+        }
+        if (oral0_ && (nd & diffKa) != 0) idxOut[c++] = 2*ncmt_;
+        return c;
+      }
+
+      // Value, Jacobian and Hessian of the amounts after one step, plus the
+      // Hessian of the central concentration.  theta0 is the full theta;
+      // Hlast/Hout hold m column-major n x n blocks (block i = amount i);
+      // HcOut is n x n.  Only the ndiff-masked entries are differentiated
+      // (q(q+1)/2 nested passes for q of them); the rest are 0, matching the
+      // zero Jacobian columns updateJfromJs() leaves.  Writes nothing into
+      // Asave_.
+      void linCmtFwdHess(const Eigen::Matrix<double, Eigen::Dynamic, 1>& theta0,
+                         const double *Hlast, bool quadCarry,
+                         Eigen::Matrix<double, Eigen::Dynamic, 1>& fx,
+                         Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>& Jout,
+                         double *Hout, double *HcOut) {
+        typedef stan::math::fvar<double> fv;
+        typedef stan::math::fvar<fv> fvv;
+        int m = ncmt_ + oral0_;
+        int n = ncmt_*2 + oral0_;
+        int idx[7];
+        int q = hessIndices(idx);
+        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> J;
+        restoreJacTo(&A_[0], J);
+        Eigen::Matrix<fvv, Eigen::Dynamic, 1> th(n), ret(m);
+        fx.resize(m);
+        Jout = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>::Zero(m, n);
+        std::fill(Hout, Hout + (size_t)m*n*n, 0.0);
+        if (HcOut != NULL) std::fill(HcOut, HcOut + (size_t)n*n, 0.0);
+        if (q == 0) {
+          for (int i = 0; i < n; i++) th(i) = fvv(fv(theta0(i), 0.0), fv(0.0, 0.0));
+          evalHessStep<fvv>(th, theta0, J, Hlast, quadCarry, ret);
+          for (int c = 0; c < m; c++) fx(c) = ret(c).val_.val_;
+          return;
+        }
+        for (int a = 0; a < q; a++) {
+          int k = idx[a];
+          for (int b = a; b < q; b++) {
+            int l = idx[b];
+            // inner tangent along l, outer tangent along k
+            for (int i = 0; i < n; i++) {
+              th(i) = fvv(fv(theta0(i), i == l ? 1.0 : 0.0),
+                          fv(i == k ? 1.0 : 0.0, 0.0));
+            }
+            evalHessStep<fvv>(th, theta0, J, Hlast, quadCarry, ret);
+            for (int c = 0; c < m; c++) {
+              double h = ret(c).d_.d_;
+              Hout[(size_t)c*n*n + k + l*n] = h;
+              Hout[(size_t)c*n*n + l + k*n] = h;
+              if (a == 0) Jout(c, l) = ret(c).val_.d_;
+              if (a == 0 && b == 0) fx(c) = ret(c).val_.val_;
+            }
+            if (HcOut != NULL) {
+              fvv cp = ret(oral0_) / getVcT<fvv>(th);
+              HcOut[k + l*n] = cp.d_.d_;
+              HcOut[l + k*n] = cp.d_.d_;
+            }
+          }
+        }
       }
 
       // Multi-directional forward-mode Jacobian: ONE pass through the same
