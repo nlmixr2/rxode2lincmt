@@ -12,6 +12,23 @@
   reports `.Machine$integer.max` then. With an rxode2 that does not send
   them the carry stays in the fixed 8-pair array, as before.
 
+### Bug fixes
+
+- At a confluence the one to three compartment solutions divided by a
+  vanishing difference of rates: an absorption rate at a disposition
+  rate, two nearly equal disposition rates, a near-zero elimination
+  under an infusion, a disposition rate far below the largest – in the
+  time-propagation solutions and the steady states alike. That gave a
+  `NaN` amount (two and three compartment oral models, oral steady
+  states), a wrong `ka` gradient at an exact one compartment confluence,
+  and values and derivatives that lost their digits near one. Inside
+  those bands (one rule over the rates the solution is built from) the
+  step and the steady states are now computed from the matrix
+  exponential of the compartment generator, which has no rate
+  differences and no eigenvalues; outside them the closed forms run
+  unchanged (bitwise). Every case of a 60-digit reference now matches to
+  1e-10 in value and 1e-9 in gradient
+  ([\#18](https://github.com/nlmixr2/rxode2lincmt/issues/18)).
 - Internal test hook
   [`.linCmtHostSim()`](https://nlmixr2.github.io/rxode2lincmt/reference/dot-linCmtHostSim.md)
   solves a synthetic subject through `linCmtA()`/`linCmtB()` on stand-in
