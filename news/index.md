@@ -62,6 +62,47 @@
 
 ### New features
 
+- `linCmtB()` now gives second-order sensitivities: `which1 = -20` reads
+  the Hessian of an amount and `which1 = -21` that of the central
+  concentration, over the full parameter order. They are kept, with a
+  quadratic carry of the dose history, only for a model that asks for
+  them (`ndiff` bit 128), so other models are unchanged. A modeled
+  bioavailability is followed (it scales a parameter-free dose amount).
+  Rows whose carry these parameter-space Hessians do not follow –
+  finite-difference sensitivities, a modeled lag, rate or duration,
+  replace and multiply records, parameters that change between records,
+  and any row advanced on a path that keeps no Hessians – read `NA`,
+  never a silent zero
+  ([\#17](https://github.com/nlmixr2/rxode2lincmt/issues/17)).
+
+- [`linCmtModelHess()`](https://nlmixr2.github.io/rxode2lincmt/reference/linCmtModelHess.md)
+  advances one step with the value, Jacobian and Hessians, the
+  second-order counterpart of
+  [`linCmtModelDouble()`](https://nlmixr2.github.io/rxode2lincmt/reference/linCmtModelDouble.md)
+  ([\#17](https://github.com/nlmixr2/rxode2lincmt/issues/17)).
+
+- An eta-space second-order carry, driven by `linCmtB()` sentinels
+  (`which1 = -30` to `-38`), gives the exact first and second
+  derivatives of the amounts and the concentration in the random effects
+  when the parameters change between records (a time-varying covariate)
+  and through a modeled bioavailability on boluses. Each row passes its
+  own `dp/deta` and `d2p/deta2` (and `dF/deta`, `d2F/deta2`); the step
+  is differentiated through them, and the interval takes the parameters
+  the solve itself used, so `locf` and `nocb` interpolation are both
+  followed. The generated model has to emit the sentinels; this is the
+  runtime the estimator’s code generation builds on
+  ([\#19](https://github.com/nlmixr2/rxode2lincmt/issues/19)).
+
+- The second-order steps can be switched per thread: the C callable
+  `linCmtSetHessThread()` (registered for `R_GetCCallable()`, detected
+  by the internal `.linCmtHessThread()`) says, on the solving thread,
+  whether the model being solved reads them. `rx->ndiff` is one field
+  shared by every model an estimator solves concurrently, so an
+  estimator that keeps the second-order bit on for all of them uses this
+  to spare the models that never read a Hessian. The second-order
+  history also starts over when a subject is solved again, and a record
+  at the initial state reads zero rather than `NA`.
+
 - `linCmt()` FOCEi fits spend less time per row: the output pass that
   runs after each solved interval now takes the thin value path instead
   of restoring the full Jacobian, the AD path copies the requested
