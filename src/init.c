@@ -44,7 +44,7 @@ SEXP _rxode2lincmt_linCmtBSensTypesSeen(SEXP);
 SEXP _rxode2lincmt_linCmtBThreadsSeen(SEXP);
 SEXP _rxode2lincmt_linCmtValueCacheCheck(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP _rxode2lincmt_linCmtHostSim(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP,
-                                  SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+                                  SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 
 static const R_CallMethodDef callMethods[] = {
   {"_rxode2lincmt_ptr", (DL_FUNC) &_rxode2lincmt_ptr, 0},
@@ -69,7 +69,7 @@ static const R_CallMethodDef callMethods[] = {
   {"_rxode2lincmt_linCmtBSensTypesSeen", (DL_FUNC) &_rxode2lincmt_linCmtBSensTypesSeen, 1},
   {"_rxode2lincmt_linCmtBThreadsSeen", (DL_FUNC) &_rxode2lincmt_linCmtBThreadsSeen, 1},
   {"_rxode2lincmt_linCmtValueCacheCheck", (DL_FUNC) &_rxode2lincmt_linCmtValueCacheCheck, 7},
-  {"_rxode2lincmt_linCmtHostSim", (DL_FUNC) &_rxode2lincmt_linCmtHostSim, 23},
+  {"_rxode2lincmt_linCmtHostSim", (DL_FUNC) &_rxode2lincmt_linCmtHostSim, 24},
   {NULL, NULL, 0}
 };
 

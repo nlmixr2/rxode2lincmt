@@ -11,6 +11,12 @@
 
 ## Bug fixes
 
+- The per-origin reads (`linCmtB()` `which1 = -9` dose time, `-10`
+  bioavailability) booked the remains of the initial amounts (`op->inits`)
+  as a dose into their own compartment from the second solved record on.
+  The initial amounts now get a row of their own in the decomposition,
+  carried like the others and never read as a dose (#26).
+- `.linCmtHostSim()` takes the initial amounts (`inits`).
 - At a confluence the one to three compartment solutions divided by a
   vanishing difference of rates: an absorption rate at a disposition rate,
   two nearly equal disposition rates, a near-zero elimination under an

@@ -12,8 +12,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // linCmtHostSim
-List linCmtHostSim(NumericVector t, IntegerVector doseCmt, NumericVector doseAmt, NumericVector doseRate, NumericMatrix theta, int ncmt, int oral0, int trans, bool useB, int sensType, int ndiff, int sensPhi, IntegerMatrix calls, NumericVector linH, IntegerVector ss, NumericVector ssTau, NumericVector ssVar, IntegerVector ssCmt, int lagMask, int originMask, int hPar, double hStep, int forwardMax);
-RcppExport SEXP _rxode2lincmt_linCmtHostSim(SEXP tSEXP, SEXP doseCmtSEXP, SEXP doseAmtSEXP, SEXP doseRateSEXP, SEXP thetaSEXP, SEXP ncmtSEXP, SEXP oral0SEXP, SEXP transSEXP, SEXP useBSEXP, SEXP sensTypeSEXP, SEXP ndiffSEXP, SEXP sensPhiSEXP, SEXP callsSEXP, SEXP linHSEXP, SEXP ssSEXP, SEXP ssTauSEXP, SEXP ssVarSEXP, SEXP ssCmtSEXP, SEXP lagMaskSEXP, SEXP originMaskSEXP, SEXP hParSEXP, SEXP hStepSEXP, SEXP forwardMaxSEXP) {
+List linCmtHostSim(NumericVector t, IntegerVector doseCmt, NumericVector doseAmt, NumericVector doseRate, NumericMatrix theta, int ncmt, int oral0, int trans, bool useB, int sensType, int ndiff, int sensPhi, IntegerMatrix calls, NumericVector linH, IntegerVector ss, NumericVector ssTau, NumericVector ssVar, IntegerVector ssCmt, int lagMask, int originMask, int hPar, double hStep, int forwardMax, NumericVector inits);
+RcppExport SEXP _rxode2lincmt_linCmtHostSim(SEXP tSEXP, SEXP doseCmtSEXP, SEXP doseAmtSEXP, SEXP doseRateSEXP, SEXP thetaSEXP, SEXP ncmtSEXP, SEXP oral0SEXP, SEXP transSEXP, SEXP useBSEXP, SEXP sensTypeSEXP, SEXP ndiffSEXP, SEXP sensPhiSEXP, SEXP callsSEXP, SEXP linHSEXP, SEXP ssSEXP, SEXP ssTauSEXP, SEXP ssVarSEXP, SEXP ssCmtSEXP, SEXP lagMaskSEXP, SEXP originMaskSEXP, SEXP hParSEXP, SEXP hStepSEXP, SEXP forwardMaxSEXP, SEXP initsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -40,7 +40,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type hPar(hParSEXP);
     Rcpp::traits::input_parameter< double >::type hStep(hStepSEXP);
     Rcpp::traits::input_parameter< int >::type forwardMax(forwardMaxSEXP);
-    rcpp_result_gen = Rcpp::wrap(linCmtHostSim(t, doseCmt, doseAmt, doseRate, theta, ncmt, oral0, trans, useB, sensType, ndiff, sensPhi, calls, linH, ss, ssTau, ssVar, ssCmt, lagMask, originMask, hPar, hStep, forwardMax));
+    Rcpp::traits::input_parameter< NumericVector >::type inits(initsSEXP);
+    rcpp_result_gen = Rcpp::wrap(linCmtHostSim(t, doseCmt, doseAmt, doseRate, theta, ncmt, oral0, trans, useB, sensType, ndiff, sensPhi, calls, linH, ss, ssTau, ssVar, ssCmt, lagMask, originMask, hPar, hStep, forwardMax, inits));
     return rcpp_result_gen;
 END_RCPP
 }

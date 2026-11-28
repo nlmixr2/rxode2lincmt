@@ -167,12 +167,14 @@ static inline double *linCmtBRateSlot(rx_solving_options_ind *ind, int idx, int 
 // (ind->linCmtOrigin), keyed and grown exactly like linCmtBRateSlot() above
 // and read back for the same reason: the output pass re-queries an index the
 // live state has already moved past.  A slot is
-// RX_LINCMT_ORIGIN_SLOTW(m) wide: the m*RX_LINCMT_ORIGIN_MAX decomposition
-// followed by the `seeded` state that produced it.  That state has to travel
+// RX_LINCMT_ORIGIN_SLOTW(m) wide: the m*RX_LINCMT_ORIGIN_MAX decomposition,
+// the `seeded` state that produced it, then the m amounts of the
+// initial-condition row (linCmtBind::originIni).  That state has to travel
 // WITH the row rather than be read off ind->linCmtOriginSeeded, because the
 // output pass runs after iniSubject() has cleared the live flag -- which is
 // the very reason this cache exists.
-#define RX_LINCMT_ORIGIN_SLOTW(m) ((m)*RX_LINCMT_ORIGIN_MAX + 1)
+#define RX_LINCMT_ORIGIN_SLOTW(m) ((m)*RX_LINCMT_ORIGIN_MAX + 1 + (m))
+#define RX_LINCMT_ORIGIN_SLOTINI(m) ((m)*RX_LINCMT_ORIGIN_MAX + 1)
 static inline double *linCmtOriginSlot(rx_solving_options_ind *ind, int idx, int width, int grow) {
   if (idx < 0 || width <= 0) return NULL;
   if (IND(ind, linCmtOriginHistW) != width) {
@@ -419,6 +421,13 @@ typedef struct linCmtBind_s {
   double etaPprev[7] = {0, 0, 0, 0, 0, 0, 0};
   std::vector<double> etaGprev, etaGGprev;
   int etaHavePrev = 0;
+  // The per-origin decomposition's initial-condition row: the part of the
+  // amounts that came from the initial amounts, never read as a dose.  Row
+  // entry and output state, rolled forward with ind->linCmtOrigin /
+  // linCmtOriginOut (which have no room for it at 3 compartments + depot).
+  double originIni[RX_LINCMT_ORIGIN_MAX] = {0, 0, 0, 0};
+  double originIniOut[RX_LINCMT_ORIGIN_MAX] = {0, 0, 0, 0};
+  int originIniSet = 0;
 } linCmtBind;
 
 // Allocated on first touch inside the solve; released with the subject in
@@ -449,11 +458,13 @@ static inline linCmtBind &linCmtBindGet(rx_solving_options_ind *ind) {
 // (invalidating the value memo and window) and, after linCmtFreeInd(), to
 // release it.  A reset keeps the second-order history: it is the record's
 // carried curvature, which a steady-state solve advances through (its state
-// buffers survive the reset too).
+// buffers survive the reset too).  It keeps the per-origin initial-condition
+// row for the same reason: ind->linCmtOrigin, the rest of the decomposition,
+// survives it.
 extern "C" void linCmtBindFree(rx_solving_options_ind *ind) {
   if (IND(ind, linCmtBind) != NULL) {
     linCmtBind *b = (linCmtBind*)(IND(ind, linCmtBind));
-    if (!b->finalFree && (b->hessStride > 0 || !b->etaS1.empty())) {
+    if (!b->finalFree && (b->hessStride > 0 || !b->etaS1.empty() || b->originIniSet)) {
       linCmtBind keep;
       keep.hessHist.swap(b->hessHist);
       keep.hessHave.swap(b->hessHave);
@@ -473,6 +484,9 @@ extern "C" void linCmtBindFree(rx_solving_options_ind *ind) {
       memcpy(keep.etaPprev, b->etaPprev, sizeof(keep.etaPprev));
       keep.etaGprev.swap(b->etaGprev); keep.etaGGprev.swap(b->etaGGprev);
       keep.etaHavePrev = b->etaHavePrev;
+      memcpy(keep.originIni, b->originIni, sizeof(keep.originIni));
+      memcpy(keep.originIniOut, b->originIniOut, sizeof(keep.originIniOut));
+      keep.originIniSet = b->originIniSet;
       *b = std::move(keep);
       return;
     }
@@ -2548,22 +2562,30 @@ static inline double linCmtBdoseTime(stan::math::linCmtStan &lc,
   return NA_REAL;
 }
 
-// Record this row's decomposition in the per-idx cache.
+// The initial amount of linCmt block compartment j.
+static inline double linCmtOriginIni0(rx_solving_options *op, int j) {
+  return OPT(op, inits) != NULL ? OPT(op, inits)[OPT(op, linOffset) + j] : 0.0;
+}
+
+// Record this row's decomposition and initial-condition row in the per-idx
+// cache.
 //
 // The stored flag is 1 for any usable decomposition and 2 for a poisoned one;
 // a slot never written keeps the 0 linCmtOriginSlot() zero-fills it with, so a
 // re-query can tell "this row has no answer" from "this row's answer is 0".
 // A row that only RESTORED (no advance -- the first record of a subject, whose
 // amounts are still the initial conditions) is a usable all-zero
-// decomposition, but the live linCmtOriginSeeded stays 0 there: it also means
-// "op->inits has not been subtracted yet", which the first real advance needs.
+// decomposition whose initial-condition row is the initial amounts, but the
+// live linCmtOriginSeeded stays 0 there: it also means "the initial-condition
+// row is not set yet", which the first real advance needs.
 static inline void linCmtOriginCacheRow(rx_solving_options_ind *ind, int idx, int m,
-                                       const double *O, int seeded) {
+                                       const double *O, const double *ini, int seeded) {
   if (m <= 0 || m > RX_LINCMT_ORIGIN_MAX) return;
   double *slot = linCmtOriginSlot(ind, idx, RX_LINCMT_ORIGIN_SLOTW(m), 1);
   if (slot == NULL) return;
   std::copy(O, O + m*RX_LINCMT_ORIGIN_MAX, slot);
   slot[m*RX_LINCMT_ORIGIN_MAX] = (seeded == 2) ? 2.0 : 1.0;
+  std::copy(ini, ini + m, slot + RX_LINCMT_ORIGIN_SLOTINI(m));
 }
 
 // The per-origin decomposition of the linCmt() amounts, kept in step with the
@@ -2580,9 +2602,9 @@ static inline void linCmtOriginCacheRow(rx_solving_options_ind *ind, int idx, in
 // restricted to its own compartment.  Rounding keeps the rows summing to the
 // amounts exactly, because the residual is re-attributed every step.
 //
-// Before the first advance the compartments hold the initial conditions, which
-// are not a dose: op->inits is subtracted once so they are not attributed to
-// one.  A steady-state record replaces the state outright rather than adding
+// The initial amounts are not a dose: they get a row of their own
+// (linCmtBind::originIni), set from op->inits at the first advance and carried
+// like the others, so the difference never books them.  A steady-state record replaces the state outright rather than adding
 // to it, so its whole result belongs to the compartment the SS dose was given
 // to.  If that compartment cannot be identified the state is poisoned
 // (linCmtOriginSeeded = 2) and every later query answers NA rather than a
@@ -2608,11 +2630,13 @@ static inline void linCmtOriginCacheRow(rx_solving_options_ind *ind, int idx, in
 // read ~16% off on a mixed linCmt()+ODE model.  A steady-state record runs its
 // SS solve and the normal advance that follows it at the SAME idx, so
 // ind->linSS is part of the row's identity.
-static inline void linCmtOriginRollForward(rx_solving_options_ind *ind, int idx) {
+static inline void linCmtOriginRollForward(rx_solving_options_ind *ind, linCmtBind &b,
+                                           int idx) {
   if (IND(ind, linCmtOriginIdx) == idx && IND(ind, linCmtOriginSS) == IND(ind, linSS)) return;
   if (IND(ind, linCmtOriginIdx) >= 0) {
     memcpy(IND(ind, linCmtOrigin), IND(ind, linCmtOriginOut), sizeof(IND(ind, linCmtOrigin)));
     IND(ind, linCmtOriginSeeded) = IND(ind, linCmtOriginOutSeeded);
+    memcpy(b.originIni, b.originIniOut, sizeof(b.originIni));
   }
   IND(ind, linCmtOriginIdx) = idx;
   IND(ind, linCmtOriginSS) = IND(ind, linSS);
@@ -2620,36 +2644,40 @@ static inline void linCmtOriginRollForward(rx_solving_options_ind *ind, int idx)
 
 // A steady-state record establishes the amounts analytically, replacing
 // whatever was there, so the whole result came through the SS dose's own
-// compartment.  Returns the seeded state to record (2 = the compartment could
-// not be identified, so nothing may be attributed).
+// compartment, and nothing is left of the initial amounts.  Returns the
+// seeded state to record (2 = the compartment could not be identified, so
+// nothing may be attributed).
 static inline int linCmtOriginSeedSs(rx_solving_options_ind *ind,
-                                     rx_solving_options *op, double *O,
+                                     rx_solving_options *op, double *O, double *ini,
                                      const Eigen::Matrix<double, Eigen::Dynamic, 1> &fx,
                                      int m) {
   int cmt = (IND(ind, linSS) == linCmtSsBolus) ? IND(ind, linSSbolusCmt) : IND(ind, cmt);
   int q0 = cmt - OPT(op, linOffset);
   memset(O, 0, sizeof(IND(ind, linCmtOriginOut)));
+  std::fill(ini, ini + RX_LINCMT_ORIGIN_MAX, 0.0);
   if (q0 < 0 || q0 >= m || (int)fx.size() != m) return 2;
   for (int j = 0; j < m; ++j) O[q0*RX_LINCMT_ORIGIN_MAX + j] = fx(j, 0);
   return 1;
 }
 
 // Attribute whatever entered the compartments since the last advance, then
-// carry every row over this interval seeing only its own rate.  Before the
-// first advance the compartments hold the initial conditions, which are not a
-// dose: op->inits is subtracted once (`sIn` == 0) so they are not booked as
-// one.  Returns the seeded state to record.
+// carry every row over this interval seeing only its own rate, and the
+// initial-condition row `ini` seeing none.  The first advance (`sIn` == 0)
+// sets `ini` to the initial amounts, so neither they nor what is left of them
+// later is booked as a dose.  Returns the seeded state to record.
 static inline int linCmtOriginStep(stan::math::linCmtStan &lc,
-                                   rx_solving_options *op, double *O,
+                                   rx_solving_options *op, double *O, double *ini,
                                    const double *aPrev, const double *rate,
                                    const Eigen::Matrix<double, Eigen::Dynamic, 1> &th,
                                    int ncmt, int oral0, int trans, int m, int sIn) {
   const int st = RX_LINCMT_ORIGIN_MAX;
+  if (sIn == 0) {
+    for (int j = 0; j < m; ++j) ini[j] = linCmtOriginIni0(op, j);
+  }
   for (int j = 0; j < m; ++j) {
-    double sum = 0.0;
+    double sum = ini[j];
     for (int q = 0; q < m; ++q) sum += O[q*st + j];
-    double base = (sIn == 0 && OPT(op, inits) != NULL) ? OPT(op, inits)[OPT(op, linOffset) + j] : 0.0;
-    O[j*st + j] += aPrev[j] - sum - base;
+    O[j*st + j] += aPrev[j] - sum;
   }
   if ((int)th.size() != 2*ncmt + oral0) return 2;
   double ka = oral0 ? th(2*ncmt, 0) : 0.0;
@@ -2665,6 +2693,10 @@ static inline int linCmtOriginStep(stan::math::linCmtStan &lc,
     lc.advanceWithRate(in, g, ka, rq, outv);
     for (int j = 0; j < m; ++j) O[q*st + j] = outv(j, 0);
   }
+  for (int k = 0; k < 1 + oral0; ++k) rq[k] = 0.0;
+  for (int j = 0; j < m; ++j) in(j, 0) = ini[j];
+  lc.advanceWithRate(in, g, ka, rq, outv);
+  for (int j = 0; j < m; ++j) ini[j] = outv(j, 0);
   return 1;
 }
 
@@ -2678,21 +2710,25 @@ static inline void linCmtOriginAdvance(stan::math::linCmtStan &lc,
                                        int ncmt, int oral0, int trans, int idx) {
   const int m = ncmt + oral0;
   if (m <= 0 || m > RX_LINCMT_ORIGIN_MAX) return;
-  linCmtOriginRollForward(ind, idx);
+  linCmtBind &b = linCmtBindGet(ind);
+  linCmtOriginRollForward(ind, b, idx);
   double *O = IND(ind, linCmtOriginOut);
   memcpy(O, IND(ind, linCmtOrigin), sizeof(IND(ind, linCmtOriginOut)));
+  double *ini = b.originIniOut;
+  memcpy(ini, b.originIni, sizeof(b.originIniOut));
+  b.originIniSet = 1;
   int sIn = IND(ind, linCmtOriginSeeded), sOut;
   if (IND(ind, linSS) != 0) {
-    sOut = linCmtOriginSeedSs(ind, op, O, fx, m);
+    sOut = linCmtOriginSeedSs(ind, op, O, ini, fx, m);
   } else if (sIn == 2) {
     // Poisoned by an earlier record whose origin could not be identified;
     // there is nothing to attribute the amounts to any more.
     sOut = 2;
   } else {
-    sOut = linCmtOriginStep(lc, op, O, aPrev, rate, th, ncmt, oral0, trans, m, sIn);
+    sOut = linCmtOriginStep(lc, op, O, ini, aPrev, rate, th, ncmt, oral0, trans, m, sIn);
   }
   IND(ind, linCmtOriginOutSeeded) = sOut;
-  linCmtOriginCacheRow(ind, idx, m, O, sOut);
+  linCmtOriginCacheRow(ind, idx, m, O, ini, sOut);
 }
 
 // linCmtB's which1 = -9 / -10 cases: the PER-COMPARTMENT dose-time and
@@ -3514,10 +3550,10 @@ static inline int linCmtOriginCached(rx_solving_options_ind *ind, int i, int ste
 // are the last advanced record's carried forward plus the doses given at
 // this time, so its decomposition is that record's cached one plus exactly
 // the attribution the next advance would make (linCmtOriginStep()): the
-// difference between the amounts here and the rows' sum, which a bolus only
-// puts in its own compartment.  Before the first advance (a record at the
-// first record's time) the initial conditions are not a dose, as on the
-// first advance.  A model tracking no origin, or a later record with no
+// difference between the amounts here and the rows' sum, initial-condition
+// row included, which a bolus only puts in its own compartment.  Before the
+// first advance (a record at the first record's time, no cached slot yet) the
+// initial-condition row is the initial amounts.  A model tracking no origin, or a later record with no
 // cached decomposition to build on, stays NA.  Writes the decomposition to O
 // (RX_LINCMT_ORIGIN_MAX squared) and *rateIdx the record whose cached rate
 // applies here: the next advanced one, whose rate is the one in force after
@@ -3540,10 +3576,9 @@ static inline int linCmtOriginUnsolved(rx_solving_options_ind *ind, rx_solving_o
   if (slot != NULL) std::copy(slot, slot + m*st, O);
   const double *A = getAdvan(idx);
   for (int j = 0; j < m; ++j) {
-    double sum = 0.0;
+    double sum = (slot != NULL) ? slot[RX_LINCMT_ORIGIN_SLOTINI(m) + j] : linCmtOriginIni0(op, j);
     for (int q = 0; q < m; ++q) sum += O[q*st + j];
-    double base = (first && OPT(op, inits) != NULL) ? OPT(op, inits)[OPT(op, linOffset) + j] : 0.0;
-    O[j*st + j] += A[j] - sum - base;
+    O[j*st + j] += A[j] - sum;
   }
   return 1;
 }
@@ -4083,7 +4118,13 @@ static void linCmtBoriginRow(linB_t &lcb, rx_solving_options_ind *ind,
     double *slot = (mOrig > 0 && mOrig <= RX_LINCMT_ORIGIN_MAX) ?
       linCmtOriginSlot(ind, idx, RX_LINCMT_ORIGIN_SLOTW(mOrig), 1) : NULL;
     if (slot != NULL && slot[mOrig*RX_LINCMT_ORIGIN_MAX] == 0.0) {
-      linCmtOriginCacheRow(ind, idx, mOrig, IND(ind, linCmtOrigin),
+      // the entry state, as the rows: the initial amounts before any advance
+      const linCmtBind &b = linCmtBindGet(ind);
+      double ini[RX_LINCMT_ORIGIN_MAX];
+      for (int j = 0; j < mOrig; ++j) {
+        ini[j] = IND(ind, linCmtOriginSeeded) == 0 ? linCmtOriginIni0(op, j) : b.originIni[j];
+      }
+      linCmtOriginCacheRow(ind, idx, mOrig, IND(ind, linCmtOrigin), ini,
                            IND(ind, linCmtOriginSeeded));
     }
   }

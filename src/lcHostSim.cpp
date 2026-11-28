@@ -86,7 +86,7 @@ struct lcSim {
   lcSimRx rx;
   lcSimOp op;
   lcSimInd ind;
-  std::vector<double> solve, inits, save, infRate, dose, h;
+  std::vector<double> solve, inits, ini0, save, infRate, dose, h;
   std::vector<int> ix, evid, idose;
   double scale[7] = {0, 0, 0, 0, 0, 0, 0};
   int extraEvid = 0;
@@ -137,7 +137,9 @@ struct lcSim {
     memset(&op, 0, sizeof(op));
     memset(&ind, 0, sizeof(ind));
     solve.assign((size_t)n*neq, 0.0);
+    // amounts from ini0, their sensitivities 0
     inits.assign(neq, 0.0);
+    std::copy(ini0.begin(), ini0.end(), inits.begin());
     save.assign(neq, 0.0);
     infRate.assign(neq, 0.0);
     rx.subjects = (rx_solving_options_ind*)&ind;
@@ -232,9 +234,11 @@ struct lcSim {
     std::copy(save.begin(), save.begin() + neq, yp);
   }
 
-  // rxode2's linear-only solve loop (ind_linSolve)
+  // rxode2's linear-only solve loop (ind_linSolve); iniSubject() starts the
+  // first record at op->inits
   void solvePass(NumericVector &val) {
     std::fill(solve.begin(), solve.end(), 0.0);
+    std::copy(inits.begin(), inits.end(), solve.begin());
     std::fill(infRate.begin(), infRate.end(), 0.0);
     double xp = t[0];
     ind._rxFlag = 1;
@@ -278,7 +282,7 @@ static void lcSimCheck(int n, int m, int ncmt, int oral0, IntegerVector doseCmt,
                        NumericVector doseAmt, NumericVector doseRate,
                        NumericMatrix theta, IntegerMatrix calls, NumericVector linH,
                        IntegerVector ss, NumericVector ssTau, NumericVector ssVar,
-                       IntegerVector ssCmt) {
+                       IntegerVector ssCmt, NumericVector inits) {
   // every per-record input has one entry per record
   const R_xlen_t lens[] = {doseCmt.size(), doseAmt.size(), doseRate.size(), ss.size(),
                            ssTau.size(), ssVar.size(), ssCmt.size(), theta.nrow()};
@@ -286,7 +290,8 @@ static void lcSimCheck(int n, int m, int ncmt, int oral0, IntegerVector doseCmt,
     if (len != n) Rcpp::stop("linCmtHostSim: inconsistent inputs");
   }
   bool shape = n >= 1 && ncmt >= 1 && ncmt <= 3 && (oral0 == 0 || oral0 == 1);
-  bool dims = theta.ncol() == 7 && calls.ncol() == 2 && linH.size() == 7;
+  bool dims = theta.ncol() == 7 && calls.ncol() == 2 && linH.size() == 7 &&
+    (inits.size() == 0 || inits.size() == m);
   if (!shape || !dims) Rcpp::stop("linCmtHostSim: inconsistent inputs");
   for (int i = 0; i < n; i++) {
     if (doseCmt[i] >= m || ss[i] < 0 || ss[i] > 3) {
@@ -331,6 +336,8 @@ static void lcSimCheck(int n, int m, int ncmt, int oral0, IntegerVector doseCmt,
 //'   `hPar` by `hStep` (rxode2's step-size probe)
 //' @param forwardMax `linCmtForwardMax`: the most points the forward
 //'   difference methods use (rxode2's default is 2)
+//' @param inits initial amounts of the linCmt states (`op->inits`), length
+//'   `ncmt + oral0`, or length 0 for none
 //' @return list with `val` (solve pass value per record), `lhs` (output pass
 //'   value), `state` (solve buffer, one row per record) and `calls` (output
 //'   pass results of `calls`, one row per record)
@@ -343,11 +350,11 @@ List linCmtHostSim(NumericVector t, IntegerVector doseCmt, NumericVector doseAmt
                    IntegerMatrix calls, NumericVector linH, IntegerVector ss,
                    NumericVector ssTau, NumericVector ssVar, IntegerVector ssCmt,
                    int lagMask, int originMask, int hPar, double hStep,
-                   int forwardMax) {
+                   int forwardMax, NumericVector inits) {
   int n = t.size();
   int m = ncmt + oral0;
   lcSimCheck(n, m, ncmt, oral0, doseCmt, doseAmt, doseRate, theta, calls, linH,
-             ss, ssTau, ssVar, ssCmt);
+             ss, ssTau, ssVar, ssCmt, inits);
   lcSim sim;
   sim.t = t; sim.doseCmt = doseCmt; sim.doseAmt = doseAmt; sim.doseRate = doseRate;
   sim.theta = theta; sim.ss = ss; sim.ssTau = ssTau; sim.ssVar = ssVar; sim.ssCmt = ssCmt;
@@ -357,6 +364,7 @@ List linCmtHostSim(NumericVector t, IntegerVector doseCmt, NumericVector doseAmt
   // the state width: amounts, then (linCmtB) their sensitivities
   sim.neq = useB ? (m + ncmt*(2*ncmt + oral0) + oral0) : m;
   sim.h.assign(linH.begin(), linH.end());
+  sim.ini0.assign(inits.begin(), inits.end());
   sim.fillRecords();
   sim.setupStructs(sensType, ndiff, sensPhi, lagMask, originMask);
   sim.bind();

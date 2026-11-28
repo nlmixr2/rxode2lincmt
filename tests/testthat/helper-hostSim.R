@@ -28,7 +28,8 @@
   originMask = 0L,
   hPar = -1L,
   hStep = 0,
-  forwardMax = 2L
+  forwardMax = 2L,
+  inits = numeric(0)
 ) {
   .n <- nrow(ev)
   if (is.null(ss)) {
@@ -57,19 +58,20 @@
     as.integer(originMask),
     as.integer(hPar),
     as.double(hStep),
-    as.integer(forwardMax)
+    as.integer(forwardMax),
+    as.double(inits)
   )
 }
 
 # Base-R reference: the concentration at every record after advancing to it
 # (`val`, NA for a record at the previous record's time) and after its dose
 # (`lhs`, what the solve buffer holds), with record i's interval solved under
-# record i's theta (as the kernel does).
-.hsRef <- function(ev, theta, ncmt, oral0) {
+# record i's theta (as the kernel does), starting from the amounts `inits`.
+.hsRef <- function(ev, theta, ncmt, oral0, inits = numeric(0)) {
   .n <- nrow(ev)
   .th <- .hsTheta(theta, .n)
   .m <- ncmt + oral0
-  .a <- numeric(.m)
+  .a <- if (length(inits)) as.double(inits) else numeric(.m)
   .r <- numeric(.m)
   .val <- rep(NA_real_, .n)
   .lhs <- rep(NA_real_, .n)
